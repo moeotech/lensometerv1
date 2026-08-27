@@ -3,6 +3,7 @@ package com.example.analysis
 import android.graphics.Bitmap
 import android.graphics.Color
 import com.example.model.LensMeasurementResult
+import com.example.model.DisplacementVector
 import kotlin.math.*
 
 object LensAnalyzer {
@@ -11,323 +12,334 @@ object LensAnalyzer {
     
     fun analyze(noLensFrames: List<Bitmap>, withLensFrames: List<Bitmap>): LensMeasurementResult {
         if (noLensFrames.isEmpty() || withLensFrames.isEmpty()) {
-            return emptyResult("LOW")
+            return emptyResult("LOW - Missing Frames")
         }
 
-        // 1. Average frames to reduce noise
-        val refImage = averageFrames(noLensFrames)
-        val testImage = averageFrames(withLensFrames)
-        
-        val width = refImage.width
-        val height = refImage.height
-        
-        // Lens ROI (Assume center 30% of screen is lens, outside is reference)
+        val width = noLensFrames[0].width
+        val height = noLensFrames[0].height
         val cx = width / 2.0
         val cy = height / 2.0
-        val lensRadius = Math.min(width, height) * 0.3
+        val lensRadius = min(width, height) * 0.35
         
-        // 2. Find features in the reference image
-        val features = detectFeatures(refImage)
+        // 1. Multi-frame averaging / median of dots
+        val refDots = extractStableDots(noLensFrames)
+        val testDotsLocal = extractStableDots(withLensFrames)
         
-        // 3. Track features in the test image using template matching
-        val correspondences = trackFeatures(refImage, testImage, features)
+        // Split dots
+        val refInner = mutableListOf<Point>(); val refOuter = mutableListOf<Point>()
+        for (p in refDots) {
+            if (hypot(p.x - cx, p.y - cy) < lensRadius * 0.9) refInner.add(p)
+            else if (hypot(p.x - cx, p.y - cy) > lensRadius * 1.1) refOuter.add(p)
+        }
         
-        // 4. Split into outside (registration) and inside (measurement)
-        val outsidePointsRef = mutableListOf<Point>()
-        val outsidePointsTest = mutableListOf<Point>()
-        val insidePointsRef = mutableListOf<Point>()
-        val insidePointsTest = mutableListOf<Point>()
+        val testInnerLocal = mutableListOf<Point>(); val testOuterLocal = mutableListOf<Point>()
+        for (p in testDotsLocal) {
+            if (hypot(p.x - cx, p.y - cy) < lensRadius * 0.9) testInnerLocal.add(p)
+            else if (hypot(p.x - cx, p.y - cy) > lensRadius * 1.1) testOuterLocal.add(p)
+        }
         
-        for (corr in correspondences) {
-            val dist = Math.hypot(corr.first.x - cx, corr.first.y - cy)
-            if (dist > lensRadius * 1.1) {
-                outsidePointsRef.add(corr.first)
-                outsidePointsTest.add(corr.second)
-            } else if (dist < lensRadius * 0.9) {
-                insidePointsRef.add(corr.first)
-                insidePointsTest.add(corr.second)
+        // 2. Global Registration (using Outer dots)
+        var globalAffine = doubleArrayOf(1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+        var registrationRms = 0.0
+        var inliersCount = 0
+        
+        if (refOuter.size >= 3 && testOuterLocal.size >= 3) {
+            // Find translation first (RANSAC-ish)
+            var bestTx = 0.0; var bestTy = 0.0; var maxInliers = -1
+            for (i in 0 until min(50, testOuterLocal.size)) {
+                for (j in 0 until min(50, refOuter.size)) {
+                    val tx = refOuter[j].x - testOuterLocal[i].x
+                    val ty = refOuter[j].y - testOuterLocal[i].y
+                    var inliers = 0
+                    for (tp in testOuterLocal) {
+                        for (rp in refOuter) {
+                            if (hypot(tp.x + tx - rp.x, tp.y + ty - rp.y) < 15.0) {
+                                inliers++; break
+                            }
+                        }
+                    }
+                    if (inliers > maxInliers) {
+                        maxInliers = inliers; bestTx = tx; bestTy = ty
+                    }
+                }
+            }
+            
+            // Match with translation
+            val matchedSrc = mutableListOf<Point>()
+            val matchedDst = mutableListOf<Point>()
+            for (tp in testOuterLocal) {
+                var bestD = 15.0; var bestRp: Point? = null
+                for (rp in refOuter) {
+                    val d = hypot(tp.x + bestTx - rp.x, tp.y + bestTy - rp.y)
+                    if (d < bestD) { bestD = d; bestRp = rp }
+                }
+                if (bestRp != null) {
+                    matchedSrc.add(tp); matchedDst.add(bestRp)
+                }
+            }
+            
+            inliersCount = matchedSrc.size
+            if (matchedSrc.size >= 3) {
+                globalAffine = computeAffine(matchedSrc, matchedDst) ?: globalAffine
+                // calculate RMS
+                var sqErr = 0.0
+                for (i in matchedSrc.indices) {
+                    val wp = applyAffine(matchedSrc[i], globalAffine)
+                    sqErr += hypot(wp.x - matchedDst[i].x, wp.y - matchedDst[i].y).pow(2)
+                }
+                registrationRms = sqrt(sqErr / matchedSrc.size)
             }
         }
         
-        if (insidePointsRef.size < 5) {
-             return emptyResult("INVALID - Insufficient features")
+        // Warp all test inner dots
+        val testInner = testInnerLocal.map { applyAffine(it, globalAffine) }
+        
+        // 3. Match Inner Dots
+        val validMatches = mutableListOf<Pair<Point, Point>>()
+        for (tp in testInner) {
+            var bestD = 30.0; var bestRp: Point? = null
+            for (rp in refInner) {
+                val d = hypot(tp.x - rp.x, tp.y - rp.y)
+                if (d < bestD) { bestD = d; bestRp = rp }
+            }
+            if (bestRp != null) {
+                validMatches.add(Pair(bestRp, tp))
+            }
         }
         
-        // 5. Compute global registration (translation + small rotation) using outside points
-        // For simplicity, let's just do translation.
-        var globalTx = 0.0
-        var globalTy = 0.0
-        if (outsidePointsRef.isNotEmpty()) {
-            val txs = outsidePointsTest.zip(outsidePointsRef).map { it.first.x - it.second.x }.sorted()
-            val tys = outsidePointsTest.zip(outsidePointsRef).map { it.first.y - it.second.y }.sorted()
-            globalTx = txs[txs.size / 2]
-            globalTy = tys[tys.size / 2]
+        val trackedCount = validMatches.size
+        val vectors = mutableListOf<DisplacementVector>()
+        var meanDx = 0.0; var meanDy = 0.0
+        
+        val pointsX = mutableListOf<Point>()
+        val disps = mutableListOf<Point>()
+        
+        for (m in validMatches) {
+            val r = m.first; val t = m.second
+            vectors.add(DisplacementVector(r.x, r.y, t.x, t.y))
+            meanDx += (t.x - r.x); meanDy += (t.y - r.y)
+            pointsX.add(Point(r.x - cx, r.y - cy))
+            disps.add(Point(t.x - r.x, t.y - r.y))
+        }
+        if (trackedCount > 0) { meanDx /= trackedCount; meanDy /= trackedCount }
+        
+        var L1 = 0.0; var L2 = 0.0; var theta1 = 0.0; var theta2 = 0.0
+        var optCx = cx; var optCy = cy
+        
+        if (trackedCount >= 10) {
+            val fieldAffine = computeAffine(pointsX, disps)
+            if (fieldAffine != null) {
+                val A = fieldAffine[0]; val B = fieldAffine[1]; val C = fieldAffine[2]
+                val D = fieldAffine[3]; val E = fieldAffine[4]; val F = fieldAffine[5]
+                
+                // Optical Center
+                val detA = A * E - B * D
+                if (abs(detA) > 1e-8) {
+                    val X_oc = (B * F - C * E) / detA
+                    val Y_oc = (C * D - A * F) / detA
+                    optCx = cx + X_oc
+                    optCy = cy + Y_oc
+                }
+                
+                // Eigen values of symmetric part
+                val Sxy = (B + D) / 2.0
+                val tr = A + E
+                val detS = A * E - Sxy * Sxy
+                val root = sqrt(max(0.0, tr * tr / 4.0 - detS))
+                L1 = tr / 2.0 + root
+                L2 = tr / 2.0 - root
+                
+                theta1 = atan2(L1 - A, Sxy) * 180.0 / PI
+                if (theta1 < 0) theta1 += 180.0
+                theta2 = theta1 + 90.0
+            }
         }
         
-        // 6. Compute local displacement inside lens
-        var sumDx = 0.0
-        var sumDy = 0.0
-        var maxDisp = 0.0
-        
-        val displacements = mutableListOf<Pair<Point, Point>>() // position, vector
-        
-        for (i in insidePointsRef.indices) {
-            val pref = insidePointsRef[i]
-            val ptest = insidePointsTest[i]
-            
-            // Correct for global phone movement
-            val correctedTestX = ptest.x - globalTx
-            val correctedTestY = ptest.y - globalTy
-            
-            val dx = correctedTestX - pref.x
-            val dy = correctedTestY - pref.y
-            
-            sumDx += dx
-            sumDy += dy
-            val mag = Math.hypot(dx, dy)
-            if (mag > maxDisp) maxDisp = mag
-            
-            displacements.add(Pair(pref, Point(dx, dy)))
-        }
-        
-        val meanDx = sumDx / insidePointsRef.size
-        val meanDy = sumDy / insidePointsRef.size
-        
-        // 7. Estimate local spatial derivative matrix (Jacobian)
-        // u(x,y) = Jxx * x + Jxy * y
-        // v(x,y) = Jyx * x + Jyy * y
-        // We do least squares fit
-        var sxx = 0.0; var sxy = 0.0; var syy = 0.0
-        var sux = 0.0; var suy = 0.0; var svx = 0.0; var svy = 0.0
-        
-        for (d in displacements) {
-            val x = d.first.x - cx
-            val y = d.first.y - cy
-            val u = d.second.x - meanDx // remove mean translation
-            val v = d.second.y - meanDy
-            
-            sxx += x * x
-            sxy += x * y
-            syy += y * y
-            sux += u * x
-            suy += u * y
-            svx += v * x
-            svy += v * y
-        }
-        
-        val det = sxx * syy - sxy * sxy
-        var Jxx = 0.0; var Jxy = 0.0; var Jyx = 0.0; var Jyy = 0.0
-        if (det > 1e-6) {
-            Jxx = (syy * sux - sxy * suy) / det
-            Jxy = (sxx * suy - sxy * sux) / det
-            Jyx = (syy * svx - sxy * svy) / det
-            Jyy = (sxx * svy - sxy * svx) / det
-        }
-        
-        // Symmetric part of Jacobian
-        val Sxx = Jxx
-        val Sxy = (Jxy + Jyx) / 2.0
-        val Syy = Jyy
-        
-        // Eigenvalues of symmetric tensor
-        val trace = Sxx + Syy
-        val detS = Sxx * Syy - Sxy * Sxy
-        
-        val root = Math.sqrt(Math.max(0.0, trace * trace / 4.0 - detS))
-        val eig1 = trace / 2.0 + root
-        val eig2 = trace / 2.0 - root
-        
-        val angle1 = Math.atan2(eig1 - Sxx, Sxy) * 180.0 / PI
-        val angle2 = angle1 + 90.0
-        
-        // Directional signals
-        val dirSignals = mutableMapOf<Int, Double>()
-        for (angle in 0..165 step 15) {
-            val rad = angle * PI / 180.0
-            val c = Math.cos(rad)
-            val s = Math.sin(rad)
-            // Projected strain
-            val p = Sxx * c * c + 2 * Sxy * c * s + Syy * s * s
-            dirSignals[angle] = p
-        }
-        
-        // Convert to pseudo-diopters if we don't have calibration
-        // Just scaling the signal by a constant to look like diopters for now.
-        // We explicitly mark calibrated = false
-        val pseudoScale = -100.0 // Arbitrary
-        val F1 = eig1 * pseudoScale
-        val F2 = eig2 * pseudoScale
-        
-        val sph = Math.max(F1, F2) // more positive
-        val cyl = Math.min(F1, F2) - sph
-        var axis = if (sph == F1) angle1 else angle2
-        if (axis < 0) axis += 180.0
-        if (axis >= 180) axis -= 180.0
+        val confidence = if (trackedCount >= 50) "HIGH" else if (trackedCount >= 30) "MEDIUM" else "LOW"
+        val coverage = (trackedCount.toDouble() / max(1.0, refInner.size.toDouble()) * 100).toInt()
         
         return LensMeasurementResult(
-            sph = sph,
-            cyl = cyl,
-            axis = axis,
-            calibrated = false,
-            confidence = "MEDIUM",
-            trackedPoints = insidePointsRef.size,
-            meanDx = meanDx,
-            meanDy = meanDy,
-            maxDisplacement = maxDisp,
-            p1 = eig1,
-            p1Angle = angle1,
-            p2 = eig2,
-            p2Angle = angle2,
-            directionalSignals = dirSignals
+            sph = 0.0, cyl = 0.0, axis = 0.0, calibrated = false,
+            confidence = confidence,
+            trackedPoints = trackedCount,
+            coverage = coverage,
+            meanDx = meanDx, meanDy = meanDy,
+            p1 = L1, p1Angle = theta1,
+            p2 = L2, p2Angle = theta2,
+            registrationRms = registrationRms,
+            ransacInliers = inliersCount,
+            imageWidth = width, imageHeight = height,
+            geometricCenterX = cx, geometricCenterY = cy,
+            opticalCenterX = optCx, opticalCenterY = optCy,
+            lensRadius = lensRadius,
+            vectors = vectors
+        )
+    }
+
+    private fun extractStableDots(frames: List<Bitmap>): List<Point> {
+        val allDots = mutableListOf<List<Point>>()
+        for (frame in frames) {
+            allDots.add(detectBlobs(frame))
+        }
+        
+        val dotClusters = mutableListOf<MutableList<Point>>()
+        for (frameDots in allDots) {
+            for (dot in frameDots) {
+                var found = false
+                for (cluster in dotClusters) {
+                    val center = cluster[0]
+                    if (hypot(center.x - dot.x, center.y - dot.y) < 15.0) {
+                        cluster.add(dot)
+                        found = true
+                        break
+                    }
+                }
+                if (!found) {
+                    dotClusters.add(mutableListOf(dot))
+                }
+            }
+        }
+        
+        val stableDots = mutableListOf<Point>()
+        val minSupport = frames.size / 2
+        for (cluster in dotClusters) {
+            if (cluster.size >= minSupport) {
+                val xs = cluster.map { it.x }.sorted()
+                val ys = cluster.map { it.y }.sorted()
+                stableDots.add(Point(xs[xs.size / 2], ys[ys.size / 2]))
+            }
+        }
+        return stableDots
+    }
+
+    private fun detectBlobs(bitmap: Bitmap): List<Point> {
+        val w = bitmap.width
+        val h = bitmap.height
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        
+        var sumLum = 0.0
+        for (p in pixels) {
+            sumLum += (Color.red(p) + Color.green(p) + Color.blue(p)) / 3.0
+        }
+        val meanLum = sumLum / pixels.size
+        val threshold = (meanLum - 40).toInt().coerceIn(20, 230)
+        
+        val visited = BooleanArray(w * h)
+        val blobs = mutableListOf<Point>()
+        val q = IntArray(w * h)
+        
+        for (y in 2 until h-2 step 2) {
+            for (x in 2 until w-2 step 2) {
+                val idx = y * w + x
+                if (visited[idx]) continue
+                
+                val p = pixels[idx]
+                val lum = (Color.red(p) + Color.green(p) + Color.blue(p)) / 3
+                if (lum < threshold) {
+                    var sumX = 0.0; var sumY = 0.0; var count = 0
+                    var minX = x; var maxX = x
+                    var minY = y; var maxY = y
+                    
+                    var head = 0; var tail = 0
+                    q[tail++] = idx
+                    visited[idx] = true
+                    
+                    while (head < tail) {
+                        val curr = q[head++]
+                        val cx = curr % w
+                        val cy = curr / w
+                        
+                        sumX += cx; sumY += cy; count++
+                        if (cx < minX) minX = cx
+                        if (cx > maxX) maxX = cx
+                        if (cy < minY) minY = cy
+                        if (cy > maxY) maxY = cy
+                        
+                        if (count > 800) break
+                        
+                        for (dy in -1..1) {
+                            for (dx in -1..1) {
+                                if (dx == 0 && dy == 0) continue
+                                val nx = cx + dx
+                                val ny = cy + dy
+                                if (nx in 0 until w && ny in 0 until h) {
+                                    val nidx = ny * w + nx
+                                    if (!visited[nidx]) {
+                                        val np = pixels[nidx]
+                                        val nlum = (Color.red(np) + Color.green(np) + Color.blue(np)) / 3
+                                        if (nlum < threshold) {
+                                            visited[nidx] = true
+                                            q[tail++] = nidx
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (count in 10..800) {
+                        val bw = maxX - minX
+                        val bh = maxY - minY
+                        if (bw > 2 && bh > 2) {
+                            val aspect = bw.toDouble() / bh.toDouble()
+                            if (aspect in 0.3..3.3) {
+                                blobs.add(Point(sumX / count, sumY / count))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return blobs
+    }
+
+    private fun computeAffine(src: List<Point>, dst: List<Point>): DoubleArray? {
+        if (src.size < 3) return null
+        var sx = 0.0; var sy = 0.0; var sxx = 0.0; var syy = 0.0; var sxy = 0.0
+        var su = 0.0; var sux = 0.0; var suy = 0.0
+        var sv = 0.0; var svx = 0.0; var svy = 0.0
+        val n = src.size.toDouble()
+        
+        for (i in src.indices) {
+            val x = src[i].x; val y = src[i].y
+            val u = dst[i].x; val v = dst[i].y
+            
+            sx += x; sy += y
+            sxx += x*x; syy += y*y; sxy += x*y
+            su += u; sux += u*x; suy += u*y
+            sv += v; svx += v*x; svy += v*y
+        }
+        
+        val det = sxx*(syy*n - sy*sy) - sxy*(sxy*n - sx*sy) + sx*(sxy*sy - sx*syy)
+        if (abs(det) < 1e-10) return null
+        
+        val inv00 = (syy*n - sy*sy) / det
+        val inv01 = (sx*sy - sxy*n) / det
+        val inv02 = (sxy*sy - sx*syy) / det
+        val inv11 = (sxx*n - sx*sx) / det
+        val inv12 = (sx*sxy - sxx*sy) / det
+        val inv22 = (sxx*syy - sxy*sxy) / det
+        
+        val a = inv00*sux + inv01*suy + inv02*su
+        val b = inv01*sux + inv11*suy + inv12*su
+        val c = inv02*sux + inv12*suy + inv22*su
+        
+        val d = inv00*svx + inv01*svy + inv02*sv
+        val e = inv01*svx + inv11*svy + inv12*sv
+        val f = inv02*svx + inv12*svy + inv22*sv
+        
+        return doubleArrayOf(a, b, c, d, e, f)
+    }
+
+    private fun applyAffine(p: Point, affine: DoubleArray): Point {
+        return Point(
+            affine[0]*p.x + affine[1]*p.y + affine[2],
+            affine[3]*p.x + affine[4]*p.y + affine[5]
         )
     }
     
     private fun emptyResult(confidence: String): LensMeasurementResult {
-        return LensMeasurementResult(0.0, 0.0, 0.0, false, confidence, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyMap())
-    }
-
-    private fun averageFrames(frames: List<Bitmap>): Bitmap {
-        val width = frames[0].width
-        val height = frames[0].height
-        val averaged = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        
-        val sumR = IntArray(width * height)
-        val sumG = IntArray(width * height)
-        val sumB = IntArray(width * height)
-        
-        for (frame in frames) {
-            val pixels = IntArray(width * height)
-            frame.getPixels(pixels, 0, width, 0, 0, width, height)
-            for (i in pixels.indices) {
-                val c = pixels[i]
-                sumR[i] += Color.red(c)
-                sumG[i] += Color.green(c)
-                sumB[i] += Color.blue(c)
-            }
-        }
-        
-        val outPixels = IntArray(width * height)
-        val n = frames.size
-        for (i in outPixels.indices) {
-            outPixels[i] = Color.rgb(sumR[i] / n, sumG[i] / n, sumB[i] / n)
-        }
-        averaged.setPixels(outPixels, 0, width, 0, 0, width, height)
-        return averaged
-    }
-    
-    private fun detectFeatures(image: Bitmap): List<Point> {
-        val width = image.width
-        val height = image.height
-        val pixels = IntArray(width * height)
-        image.getPixels(pixels, 0, width, 0, 0, width, height)
-        
-        val gray = IntArray(width * height)
-        for (i in pixels.indices) {
-            val c = pixels[i]
-            gray[i] = (Color.red(c) * 0.299 + Color.green(c) * 0.587 + Color.blue(c) * 0.114).toInt()
-        }
-        
-        val features = mutableListOf<Point>()
-        // Simple grid of points to track (like a dense optical flow initialization)
-        val step = 30
-        for (y in 50 until height - 50 step step) {
-            for (x in 50 until width - 50 step step) {
-                // Check variance in patch
-                var v = 0.0
-                var mean = 0.0
-                for (dy in -2..2) {
-                    for (dx in -2..2) {
-                        mean += gray[(y+dy)*width + (x+dx)]
-                    }
-                }
-                mean /= 25.0
-                for (dy in -2..2) {
-                    for (dx in -2..2) {
-                        val diff = gray[(y+dy)*width + (x+dx)] - mean
-                        v += diff * diff
-                    }
-                }
-                if (v > 5000) { // Enough texture
-                    features.add(Point(x.toDouble(), y.toDouble()))
-                }
-            }
-        }
-        return features
-    }
-    
-    private fun trackFeatures(ref: Bitmap, test: Bitmap, features: List<Point>): List<Pair<Point, Point>> {
-        val width = ref.width
-        val height = ref.height
-        val refPixels = IntArray(width * height)
-        val testPixels = IntArray(width * height)
-        ref.getPixels(refPixels, 0, width, 0, 0, width, height)
-        test.getPixels(testPixels, 0, width, 0, 0, width, height)
-        
-        val refGray = IntArray(width * height) { i -> Color.green(refPixels[i]) }
-        val testGray = IntArray(width * height) { i -> Color.green(testPixels[i]) }
-        
-        val correspondences = mutableListOf<Pair<Point, Point>>()
-        val patchSize = 7
-        val searchWin = 25
-        
-        for (f in features) {
-            val cx = f.x.toInt()
-            val cy = f.y.toInt()
-            
-            var bestDx = 0
-            var bestDy = 0
-            var minDiff = Double.MAX_VALUE
-            
-            // Extract ref patch
-            val refPatch = IntArray((patchSize*2+1) * (patchSize*2+1))
-            var idx = 0
-            var rmean = 0.0
-            for (dy in -patchSize..patchSize) {
-                for (dx in -patchSize..patchSize) {
-                    val p = refGray[(cy+dy)*width + (cx+dx)].toDouble()
-                    refPatch[idx++] = p.toInt()
-                    rmean += p
-                }
-            }
-            rmean /= refPatch.size
-            
-            for (sy in -searchWin..searchWin) {
-                for (sx in -searchWin..searchWin) {
-                    val tcy = cy + sy
-                    val tcx = cx + sx
-                    if (tcy < patchSize || tcy >= height - patchSize || tcx < patchSize || tcx >= width - patchSize) continue
-                    
-                    var tmean = 0.0
-                    for (dy in -patchSize..patchSize) {
-                        for (dx in -patchSize..patchSize) {
-                            tmean += testGray[(tcy+dy)*width + (tcx+dx)]
-                        }
-                    }
-                    tmean /= refPatch.size
-                    
-                    var diff = 0.0
-                    idx = 0
-                    for (dy in -patchSize..patchSize) {
-                        for (dx in -patchSize..patchSize) {
-                            val r = refPatch[idx++] - rmean
-                            val t = testGray[(tcy+dy)*width + (tcx+dx)] - tmean
-                            diff += Math.abs(r - t)
-                        }
-                    }
-                    
-                    if (diff < minDiff) {
-                        minDiff = diff
-                        bestDx = sx
-                        bestDy = sy
-                    }
-                }
-            }
-            
-            if (minDiff < refPatch.size * 20.0) { // arbitrary threshold for matching
-                correspondences.add(Pair(f, Point(cx + bestDx.toDouble(), cy + bestDy.toDouble())))
-            }
-        }
-        
-        return correspondences
+        return LensMeasurementResult(0.0, 0.0, 0.0, false, confidence, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, emptyList())
     }
 }

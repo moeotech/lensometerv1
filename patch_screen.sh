@@ -1,3 +1,4 @@
+cat << 'INNER_EOF' > app/src/main/java/com/example/ui/LensExperimentScreen.kt
 package com.example.ui
 
 import android.content.Context
@@ -401,3 +402,4 @@ fun proxyToBitmap(image: ImageProxy): Bitmap? {
     matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
     return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 }
+INNER_EOF

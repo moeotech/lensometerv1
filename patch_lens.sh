@@ -1,0 +1,2 @@
+sed -i 's/val preview = Preview/android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({\n                if (isDisposed) return@postDelayed\n                val preview = Preview/' app/src/main/java/com/example/ui/LensExperimentScreen.kt
+sed -i 's/camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)/camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)\n            } catch (exc: Exception) {}\n            }, 300)/' app/src/main/java/com/example/ui/LensExperimentScreen.kt
