@@ -7,11 +7,8 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
-import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
-import android.media.Image
 import androidx.camera.camera2.interop.Camera2CameraControl
-import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
@@ -25,7 +22,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,19 +31,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.LifecycleOwner
 import com.example.analysis.LensAnalyzer
 import com.example.model.LensMeasurementResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.opencv.android.OpenCVLoader
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import kotlin.math.*
@@ -83,6 +78,18 @@ fun LensExperimentScreen() {
 
     var frameCaptureCallback by remember { mutableStateOf<((ImageProxy) -> Unit)?>(null) }
 
+    var alignMessage by remember { mutableStateOf("DETECTING LENS...") }
+    var isStable by remember { mutableStateOf(false) }
+    var detectedEllipse by remember { mutableStateOf<org.opencv.core.RotatedRect?>(null) }
+    var imgW by remember { mutableIntStateOf(1) }
+    var imgH by remember { mutableIntStateOf(1) }
+
+    LaunchedEffect(Unit) {
+        if (!OpenCVLoader.initLocal()) {
+            android.util.Log.e("OpenCV", "Initialization failed")
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val analysisExecutor = Executors.newSingleThreadExecutor()
         var isDisposed = false
@@ -104,6 +111,34 @@ fun LensExperimentScreen() {
                     .also { analysis ->
                         analysis.setAnalyzer(analysisExecutor) { imageProxy ->
                             try {
+                                if (phase == LensExperimentPhase.ALIGN_LENS) {
+                                    val bmp = proxyToBitmap(imageProxy)
+                                    if (bmp != null) {
+                                        imgW = bmp.width
+                                        imgH = bmp.height
+                                        val ell = detectLensEllipse(bmp)
+                                        detectedEllipse = ell
+                                        if (ell != null) {
+                                            val cx = ell.center.x
+                                            val cy = ell.center.y
+                                            val w = imgW
+                                            val h = imgH
+                                            if (cx < w * 0.4) alignMessage = "MOVE RIGHT"
+                                            else if (cx > w * 0.6) alignMessage = "MOVE LEFT"
+                                            else if (cy < h * 0.4) alignMessage = "MOVE DOWN"
+                                            else if (cy > h * 0.6) alignMessage = "MOVE UP"
+                                            else {
+                                                alignMessage = "HOLD STILL"
+                                                isStable = true
+                                            }
+                                        } else {
+                                            alignMessage = "DETECTING LENS..."
+                                            isStable = false
+                                        }
+                                    }
+                                } else {
+                                    isStable = true // Not aligning lens, so we can capture
+                                }
                                 frameCaptureCallback?.invoke(imageProxy)
                             } finally {
                                 imageProxy.close()
@@ -139,20 +174,31 @@ fun LensExperimentScreen() {
         }
     }
 
-    suspend fun runCaptureSequence(targetList: MutableList<Bitmap>) {
+    suspend fun runCaptureSequence(targetList: MutableList<Bitmap>, lockAE: Boolean) {
         targetList.clear()
         
-        // Lock Focus/AE
-        camera2ControlRef?.let { c2c ->
-            val builder = CaptureRequestOptions.Builder()
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, focusDistance)
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
-            c2c.captureRequestOptions = builder.build()
+        if (lockAE) {
+            // Let auto expose converge first
+            camera2ControlRef?.let { c2c ->
+                val builder = CaptureRequestOptions.Builder()
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                builder.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, focusDistance)
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                c2c.captureRequestOptions = builder.build()
+            }
+            
+            delay(1000)
+            
+            // Lock Exposure and WB
+            camera2ControlRef?.let { c2c ->
+                val builder = CaptureRequestOptions.Builder()
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, true)
+                c2c.captureRequestOptions = builder.build()
+            }
+            delay(500)
         }
-        
-        delay(500)
         
         withContext(Dispatchers.Default) {
             for (i in 0 until 30) {
@@ -171,8 +217,9 @@ fun LensExperimentScreen() {
                 delay(10)
             }
         }
-        
-        // Restore Auto
+    }
+
+    fun restoreAuto() {
         camera2ControlRef?.let { c2c ->
             val builder = CaptureRequestOptions.Builder()
             builder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
@@ -197,48 +244,72 @@ fun LensExperimentScreen() {
                 }
             )
             
-            // Alignment Guide
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = size.width / 2
                 val cy = size.height / 2
                 val radius = min(size.width, size.height) * 0.35f
                 
-                drawCircle(
-                    color = if (phase == LensExperimentPhase.ALIGN_NO_LENS) Color.Yellow else Color.Cyan,
-                    radius = radius,
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 4f)
-                )
-                
-                drawLine(Color.Red, Offset(cx - 20, cy), Offset(cx + 20, cy), 2f)
-                drawLine(Color.Red, Offset(cx, cy - 20), Offset(cx, cy + 20), 2f)
+                if (phase == LensExperimentPhase.ALIGN_NO_LENS) {
+                    drawCircle(
+                        color = Color.Yellow,
+                        radius = radius,
+                        center = Offset(cx, cy),
+                        style = Stroke(width = 4f)
+                    )
+                    drawLine(Color.Red, Offset(cx - 20, cy), Offset(cx + 20, cy), 2f)
+                    drawLine(Color.Red, Offset(cx, cy - 20), Offset(cx, cy + 20), 2f)
+                } else {
+                    // Draw detected ellipse
+                    val ell = detectedEllipse
+                    if (ell != null && imgW > 1 && imgH > 1) {
+                        val scaleX = size.width / imgW
+                        val scaleY = size.height / imgH
+                        val rrx = ell.center.x * scaleX
+                        val rry = ell.center.y * scaleY
+                        val rw = ell.size.width * scaleX / 2.0f
+                        val rh = ell.size.height * scaleY / 2.0f
+                        
+                        drawOval(
+                            color = if (isStable) Color.Green else Color.Cyan,
+                            topLeft = Offset((rrx - rw).toFloat(), (rry - rh).toFloat()),
+                            size = androidx.compose.ui.geometry.Size((rw*2).toFloat(), (rh*2).toFloat()),
+                            style = Stroke(width = 6f)
+                        )
+                    } else {
+                        drawCircle(Color.Gray, radius, Offset(cx, cy), style = Stroke(width = 4f))
+                    }
+                }
             }
             
             Column(modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = if (phase == LensExperimentPhase.ALIGN_NO_LENS) "ALIGN PRINTED TARGET (NO LENS)" else "PLACE LENS IN CIRCLE",
+                    text = if (phase == LensExperimentPhase.ALIGN_NO_LENS) "ALIGN PRINTED TARGET (NO LENS)" else alignMessage,
                     color = Color.White, fontWeight = FontWeight.Bold,
                     modifier = Modifier.background(Color(0x88000000), RoundedCornerShape(8.dp)).padding(16.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = {
-                    coroutineScope.launch {
-                        if (phase == LensExperimentPhase.ALIGN_NO_LENS) {
-                            phase = LensExperimentPhase.CAPTURE_NO_LENS
-                            runCaptureSequence(noLensFrames)
-                            phase = LensExperimentPhase.ALIGN_LENS
-                        } else {
-                            phase = LensExperimentPhase.CAPTURE_LENS
-                            runCaptureSequence(withLensFrames)
-                            phase = LensExperimentPhase.PROCESSING
-                            val res = withContext(Dispatchers.Default) {
-                                LensAnalyzer.analyze(noLensFrames, withLensFrames)
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            if (phase == LensExperimentPhase.ALIGN_NO_LENS) {
+                                phase = LensExperimentPhase.CAPTURE_NO_LENS
+                                runCaptureSequence(noLensFrames, lockAE = true)
+                                phase = LensExperimentPhase.ALIGN_LENS
+                            } else {
+                                phase = LensExperimentPhase.CAPTURE_LENS
+                                runCaptureSequence(withLensFrames, lockAE = false) // already locked
+                                restoreAuto()
+                                phase = LensExperimentPhase.PROCESSING
+                                val res = withContext(Dispatchers.Default) {
+                                    LensAnalyzer.analyze(noLensFrames, withLensFrames)
+                                }
+                                runResults.add(res)
+                                phase = LensExperimentPhase.RESULTS
                             }
-                            runResults.add(res)
-                            phase = LensExperimentPhase.RESULTS
                         }
-                    }
-                }) {
+                    },
+                    enabled = isStable
+                ) {
                     Text(if (phase == LensExperimentPhase.ALIGN_NO_LENS) "CAPTURE BASE" else "CAPTURE LENS")
                 }
             }
@@ -264,6 +335,7 @@ fun LensExperimentScreen() {
                         ResultRow("COVERAGE", "${res.coverage}%")
                         ResultRow("REGISTRATION RMS", String.format("%.2f px", res.registrationRms))
                         ResultRow("RANSAC INLIERS", "${res.ransacInliers}")
+                        ResultRow("CONFIDENCE", res.confidence)
                         Spacer(modifier = Modifier.height(16.dp))
                         ResultRow("PRINCIPAL SIGNAL 1", String.format("%.5f (%.0f°)", res.p1, res.p1Angle))
                         ResultRow("PRINCIPAL SIGNAL 2", String.format("%.5f (%.0f°)", res.p2, res.p2Angle))
@@ -373,8 +445,6 @@ fun LensExperimentScreen() {
     }
 }
 
-// ResultRow is already declared in ExperimentScreen.kt
-
 fun proxyToBitmap(image: ImageProxy): Bitmap? {
     val planeProxy = image.planes
     val yBuffer = planeProxy[0].buffer
@@ -402,4 +472,37 @@ fun proxyToBitmap(image: ImageProxy): Bitmap? {
     matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
     return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 }
+
+fun detectLensEllipse(bitmap: Bitmap): org.opencv.core.RotatedRect? {
+    val mat = org.opencv.core.Mat()
+    org.opencv.android.Utils.bitmapToMat(bitmap, mat)
+    val gray = org.opencv.core.Mat()
+    org.opencv.imgproc.Imgproc.cvtColor(mat, gray, org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY)
+    org.opencv.imgproc.Imgproc.GaussianBlur(gray, gray, org.opencv.core.Size(9.0, 9.0), 2.0, 2.0)
+    
+    val edges = org.opencv.core.Mat()
+    org.opencv.imgproc.Imgproc.Canny(gray, edges, 50.0, 150.0)
+    
+    val contours = mutableListOf<org.opencv.core.MatOfPoint>()
+    val hierarchy = org.opencv.core.Mat()
+    org.opencv.imgproc.Imgproc.findContours(edges, contours, hierarchy, org.opencv.imgproc.Imgproc.RETR_EXTERNAL, org.opencv.imgproc.Imgproc.CHAIN_APPROX_SIMPLE)
+    
+    var bestEllipse: org.opencv.core.RotatedRect? = null
+    var maxArea = 0.0
+    
+    for (c in contours) {
+        if (c.toArray().size >= 5) {
+            val pt2f = org.opencv.core.MatOfPoint2f(*c.toArray())
+            val ellipse = org.opencv.imgproc.Imgproc.fitEllipse(pt2f)
+            val area = Math.PI * (ellipse.size.width / 2.0) * (ellipse.size.height / 2.0)
+            if (area > maxArea && area > (gray.cols() * gray.rows() * 0.05)) {
+                maxArea = area
+                bestEllipse = ellipse
+            }
+        }
+    }
+    mat.release(); gray.release(); edges.release(); hierarchy.release()
+    return bestEllipse
+}
 INNER_EOF
+bash patch_screen.sh
