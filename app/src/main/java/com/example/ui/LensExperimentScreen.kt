@@ -6,11 +6,8 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
-import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
-import android.media.Image
 import androidx.camera.camera2.interop.Camera2CameraControl
-import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
@@ -24,7 +21,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,19 +30,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.LifecycleOwner
 import com.example.analysis.LensAnalyzer
 import com.example.model.LensMeasurementResult
+import com.example.model.LensGeometry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.opencv.android.OpenCVLoader
+import org.opencv.core.RotatedRect
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import kotlin.math.*
@@ -82,6 +79,21 @@ fun LensExperimentScreen() {
 
     var frameCaptureCallback by remember { mutableStateOf<((ImageProxy) -> Unit)?>(null) }
 
+    var alignMessage by remember { mutableStateOf("DETECTING LENS...") }
+    var isStable by remember { mutableStateOf(false) }
+    var detectedEllipse by remember { mutableStateOf<RotatedRect?>(null) }
+    var stableLensGeom by remember { mutableStateOf<LensGeometry?>(null) }
+    var imgW by remember { mutableIntStateOf(1) }
+    var imgH by remember { mutableIntStateOf(1) }
+    
+    val ellipseHistory = remember { mutableListOf<RotatedRect>() }
+
+    LaunchedEffect(Unit) {
+        if (!OpenCVLoader.initLocal()) {
+            android.util.Log.e("OpenCV", "Initialization failed")
+        }
+    }
+
     DisposableEffect(lifecycleOwner) {
         val analysisExecutor = Executors.newSingleThreadExecutor()
         var isDisposed = false
@@ -103,6 +115,83 @@ fun LensExperimentScreen() {
                     .also { analysis ->
                         analysis.setAnalyzer(analysisExecutor) { imageProxy ->
                             try {
+                                if (phase == LensExperimentPhase.ALIGN_LENS) {
+                                    val bmp = proxyToBitmap(imageProxy)
+                                    if (bmp != null) {
+                                        imgW = bmp.width
+                                        imgH = bmp.height
+                                        val ell = detectLensEllipse(bmp)
+                                        detectedEllipse = ell
+                                        if (ell != null) {
+                                            ellipseHistory.add(ell)
+                                            if (ellipseHistory.size > 10) {
+                                                ellipseHistory.removeAt(0)
+                                            }
+                                            
+                                            val cx = ell.center.x
+                                            val cy = ell.center.y
+                                            val w = imgW
+                                            val h = imgH
+                                            
+                                            // 1. Check Centering
+                                            if (cx < w * 0.4) alignMessage = "MOVE RIGHT"
+                                            else if (cx > w * 0.6) alignMessage = "MOVE LEFT"
+                                            else if (cy < h * 0.4) alignMessage = "MOVE DOWN"
+                                            else if (cy > h * 0.6) alignMessage = "MOVE UP"
+                                            else {
+                                                // 2. Check Size (Distance)
+                                                val sizeRatio = max(ell.size.width, ell.size.height) / min(w, h).toDouble()
+                                                if (sizeRatio < 0.4) {
+                                                    alignMessage = "MOVE CLOSER"
+                                                    isStable = false
+                                                } else if (sizeRatio > 0.8) {
+                                                    alignMessage = "MOVE FARTHER"
+                                                    isStable = false
+                                                } else {
+                                                    // 3. Check Tilt (Aspect Ratio)
+                                                    val aspect = max(ell.size.width, ell.size.height) / min(ell.size.width, ell.size.height)
+                                                    if (aspect > 1.3) {
+                                                        alignMessage = "REDUCE TILT"
+                                                        isStable = false
+                                                    } else {
+                                                        // 4. Temporal Stability
+                                                        if (ellipseHistory.size == 10) {
+                                                            val meanCx = ellipseHistory.map { it.center.x }.average()
+                                                            val meanCy = ellipseHistory.map { it.center.y }.average()
+                                                            val meanW = ellipseHistory.map { it.size.width }.average()
+                                                            val meanH = ellipseHistory.map { it.size.height }.average()
+                                                            val meanAngle = ellipseHistory.map { it.angle }.average()
+                                                            
+                                                            val stdCx = sqrt(ellipseHistory.map { (it.center.x - meanCx).pow(2) }.average())
+                                                            val stdCy = sqrt(ellipseHistory.map { (it.center.y - meanCy).pow(2) }.average())
+                                                            val stdW = sqrt(ellipseHistory.map { (it.size.width - meanW).pow(2) }.average())
+                                                            val stdH = sqrt(ellipseHistory.map { (it.size.height - meanH).pow(2) }.average())
+                                                            val stdAngle = sqrt(ellipseHistory.map { (it.angle - meanAngle).pow(2) }.average())
+                                                            
+                                                            if (stdCx < 10.0 && stdCy < 10.0 && stdW < 10.0 && stdH < 10.0 && stdAngle < 5.0) {
+                                                                alignMessage = "HOLD STILL"
+                                                                isStable = true
+                                                                stableLensGeom = LensGeometry(meanCx, meanCy, meanW, meanH, meanAngle)
+                                                            } else {
+                                                                alignMessage = "STABILIZING..."
+                                                                isStable = false
+                                                            }
+                                                        } else {
+                                                            alignMessage = "STABILIZING..."
+                                                            isStable = false
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            alignMessage = "DETECTING LENS..."
+                                            isStable = false
+                                            ellipseHistory.clear()
+                                        }
+                                    }
+                                } else {
+                                    isStable = true // Not aligning lens, so we can capture
+                                }
                                 frameCaptureCallback?.invoke(imageProxy)
                             } finally {
                                 imageProxy.close()
@@ -138,20 +227,31 @@ fun LensExperimentScreen() {
         }
     }
 
-    suspend fun runCaptureSequence(targetList: MutableList<Bitmap>) {
+    suspend fun runCaptureSequence(targetList: MutableList<Bitmap>, lockAE: Boolean) {
         targetList.clear()
         
-        // Lock Focus/AE
-        camera2ControlRef?.let { c2c ->
-            val builder = CaptureRequestOptions.Builder()
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, focusDistance)
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
-            c2c.captureRequestOptions = builder.build()
+        if (lockAE) {
+            // Let auto expose converge first
+            camera2ControlRef?.let { c2c ->
+                val builder = CaptureRequestOptions.Builder()
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                builder.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, focusDistance)
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                c2c.captureRequestOptions = builder.build()
+            }
+            
+            delay(1000)
+            
+            // Lock Exposure and WB
+            camera2ControlRef?.let { c2c ->
+                val builder = CaptureRequestOptions.Builder()
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, true)
+                c2c.captureRequestOptions = builder.build()
+            }
+            delay(500)
         }
-        
-        delay(500)
         
         withContext(Dispatchers.Default) {
             for (i in 0 until 30) {
@@ -170,8 +270,9 @@ fun LensExperimentScreen() {
                 delay(10)
             }
         }
-        
-        // Restore Auto
+    }
+
+    fun restoreAuto() {
         camera2ControlRef?.let { c2c ->
             val builder = CaptureRequestOptions.Builder()
             builder.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
@@ -196,48 +297,72 @@ fun LensExperimentScreen() {
                 }
             )
             
-            // Alignment Guide
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = size.width / 2
                 val cy = size.height / 2
                 val radius = min(size.width, size.height) * 0.35f
                 
-                drawCircle(
-                    color = if (phase == LensExperimentPhase.ALIGN_NO_LENS) Color.Yellow else Color.Cyan,
-                    radius = radius,
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 4f)
-                )
-                
-                drawLine(Color.Red, Offset(cx - 20, cy), Offset(cx + 20, cy), 2f)
-                drawLine(Color.Red, Offset(cx, cy - 20), Offset(cx, cy + 20), 2f)
+                if (phase == LensExperimentPhase.ALIGN_NO_LENS) {
+                    drawCircle(
+                        color = Color.Yellow,
+                        radius = radius,
+                        center = Offset(cx, cy),
+                        style = Stroke(width = 4f)
+                    )
+                    drawLine(Color.Red, Offset(cx - 20, cy), Offset(cx + 20, cy), 2f)
+                    drawLine(Color.Red, Offset(cx, cy - 20), Offset(cx, cy + 20), 2f)
+                } else {
+                    // Draw detected ellipse
+                    val ell = detectedEllipse
+                    if (ell != null && imgW > 1 && imgH > 1) {
+                        val scaleX = size.width / imgW
+                        val scaleY = size.height / imgH
+                        val rrx = ell.center.x * scaleX
+                        val rry = ell.center.y * scaleY
+                        val rw = ell.size.width * scaleX / 2.0f
+                        val rh = ell.size.height * scaleY / 2.0f
+                        
+                        drawOval(
+                            color = if (isStable) Color.Green else Color.Cyan,
+                            topLeft = Offset((rrx - rw).toFloat(), (rry - rh).toFloat()),
+                            size = androidx.compose.ui.geometry.Size((rw*2).toFloat(), (rh*2).toFloat()),
+                            style = Stroke(width = 6f)
+                        )
+                    } else {
+                        drawCircle(Color.Gray, radius, Offset(cx, cy), style = Stroke(width = 4f))
+                    }
+                }
             }
             
             Column(modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = if (phase == LensExperimentPhase.ALIGN_NO_LENS) "ALIGN PRINTED TARGET (NO LENS)" else "PLACE LENS IN CIRCLE",
+                    text = if (phase == LensExperimentPhase.ALIGN_NO_LENS) "ALIGN PRINTED TARGET (NO LENS)" else alignMessage,
                     color = Color.White, fontWeight = FontWeight.Bold,
                     modifier = Modifier.background(Color(0x88000000), RoundedCornerShape(8.dp)).padding(16.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = {
-                    coroutineScope.launch {
-                        if (phase == LensExperimentPhase.ALIGN_NO_LENS) {
-                            phase = LensExperimentPhase.CAPTURE_NO_LENS
-                            runCaptureSequence(noLensFrames)
-                            phase = LensExperimentPhase.ALIGN_LENS
-                        } else {
-                            phase = LensExperimentPhase.CAPTURE_LENS
-                            runCaptureSequence(withLensFrames)
-                            phase = LensExperimentPhase.PROCESSING
-                            val res = withContext(Dispatchers.Default) {
-                                LensAnalyzer.analyze(noLensFrames, withLensFrames)
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            if (phase == LensExperimentPhase.ALIGN_NO_LENS) {
+                                phase = LensExperimentPhase.CAPTURE_NO_LENS
+                                runCaptureSequence(noLensFrames, lockAE = true)
+                                phase = LensExperimentPhase.ALIGN_LENS
+                            } else {
+                                phase = LensExperimentPhase.CAPTURE_LENS
+                                runCaptureSequence(withLensFrames, lockAE = false) // already locked
+                                restoreAuto()
+                                phase = LensExperimentPhase.PROCESSING
+                                val res = withContext(Dispatchers.Default) {
+                                    LensAnalyzer.analyze(noLensFrames, withLensFrames, stableLensGeom)
+                                }
+                                runResults.add(res)
+                                phase = LensExperimentPhase.RESULTS
                             }
-                            runResults.add(res)
-                            phase = LensExperimentPhase.RESULTS
                         }
-                    }
-                }) {
+                    },
+                    enabled = isStable
+                ) {
                     Text(if (phase == LensExperimentPhase.ALIGN_NO_LENS) "CAPTURE BASE" else "CAPTURE LENS")
                 }
             }
@@ -259,52 +384,58 @@ fun LensExperimentScreen() {
                     if (runResults.isNotEmpty()) {
                         val res = runResults.last()
                         
-                        ResultRow("TRACKED DOTS", "${res.trackedPoints}")
-                        ResultRow("COVERAGE", "${res.coverage}%")
-                        ResultRow("REGISTRATION RMS", String.format("%.2f px", res.registrationRms))
-                        ResultRow("RANSAC INLIERS", "${res.ransacInliers}")
-                        Spacer(modifier = Modifier.height(16.dp))
-                        ResultRow("PRINCIPAL SIGNAL 1", String.format("%.5f (%.0f°)", res.p1, res.p1Angle))
-                        ResultRow("PRINCIPAL SIGNAL 2", String.format("%.5f (%.0f°)", res.p2, res.p2Angle))
-                        ResultRow("ANISOTROPY", String.format("%.5f", abs(res.p1 - res.p2)))
-                        ResultRow("ISOTROPIC COMP", String.format("%.5f", (res.p1 + res.p2)/2))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        ResultRow("GEOMETRIC CENTER", String.format("%.1f, %.1f", res.geometricCenterX, res.geometricCenterY))
-                        ResultRow("OPTICAL CENTER", String.format("%.1f, %.1f", res.opticalCenterX, res.opticalCenterY))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Button(onClick = { showDebug = !showDebug }, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (showDebug) "Hide Vector Debug" else "Show Vector Debug")
-                        }
-                        
-                        if (showDebug && res.vectors.isNotEmpty()) {
-                            var magFactor by remember { mutableStateOf(5f) }
+                        if (res.confidence.startsWith("FAILED")) {
+                            Text("ERROR: ${res.confidence}", color = Color.Red, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text("Vector Magnification: ${magFactor.toInt()}x", color = Color.White)
-                            Slider(value = magFactor, onValueChange = { magFactor = it }, valueRange = 1f..20f)
+                        } else {
+                            ResultRow("TRACKED DOTS", "${res.trackedPoints}")
+                            ResultRow("COVERAGE", "${res.coverage}%")
+                            ResultRow("REGISTRATION RMS", String.format("%.2f px", res.registrationRms))
+                            ResultRow("RANSAC INLIERS", "${res.ransacInliers}")
+                            ResultRow("CONFIDENCE", res.confidence)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            ResultRow("PRINCIPAL SIGNAL 1", String.format("%.5f (%.0f°)", res.p1, res.p1Angle))
+                            ResultRow("PRINCIPAL SIGNAL 2", String.format("%.5f (%.0f°)", res.p2, res.p2Angle))
+                            ResultRow("ANISOTROPY", String.format("%.5f", abs(res.p1 - res.p2)))
+                            ResultRow("ISOTROPIC COMP", String.format("%.5f", (res.p1 + res.p2)/2))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            ResultRow("GEOMETRIC CENTER", String.format("%.1f, %.1f", res.geometricCenterX, res.geometricCenterY))
+                            ResultRow("OPTICAL CENTER", String.format("%.1f, %.1f", res.opticalCenterX, res.opticalCenterY))
+                            Spacer(modifier = Modifier.height(16.dp))
                             
-                            Box(modifier = Modifier.fillMaxWidth().aspectRatio(res.imageWidth.toFloat() / res.imageHeight.toFloat()).border(1.dp, Color.Gray)) {
-                                Canvas(modifier = Modifier.fillMaxSize()) {
-                                    val scaleX = size.width / res.imageWidth
-                                    val scaleY = size.height / res.imageHeight
-                                    
-                                    drawCircle(Color.DarkGray, res.lensRadius.toFloat() * scaleX, Offset(res.geometricCenterX.toFloat() * scaleX, res.geometricCenterY.toFloat() * scaleY), style = Stroke(2f))
-                                    drawCircle(Color.Magenta, 10f, Offset(res.opticalCenterX.toFloat() * scaleX, res.opticalCenterY.toFloat() * scaleY))
-                                    
-                                    val oc = Offset(res.opticalCenterX.toFloat() * scaleX, res.opticalCenterY.toFloat() * scaleY)
-                                    val axLen = res.lensRadius.toFloat() * scaleX
-                                    val rad1 = res.p1Angle * Math.PI / 180.0
-                                    val rad2 = res.p2Angle * Math.PI / 180.0
-                                    drawLine(Color.Cyan, oc - Offset((cos(rad1)*axLen).toFloat(), (sin(rad1)*axLen).toFloat()), oc + Offset((cos(rad1)*axLen).toFloat(), (sin(rad1)*axLen).toFloat()), 3f)
-                                    drawLine(Color.Yellow, oc - Offset((cos(rad2)*axLen).toFloat(), (sin(rad2)*axLen).toFloat()), oc + Offset((cos(rad2)*axLen).toFloat(), (sin(rad2)*axLen).toFloat()), 3f)
-                                    
-                                    for (v in res.vectors) {
-                                        val start = Offset(v.rx.toFloat() * scaleX, v.ry.toFloat() * scaleY)
-                                        val dx = (v.ox - v.rx).toFloat() * scaleX * magFactor
-                                        val dy = (v.oy - v.ry).toFloat() * scaleY * magFactor
-                                        val end = start + Offset(dx, dy)
-                                        drawLine(Color.Red, start, end, 2f)
-                                        drawCircle(Color.White, 3f, start)
+                            Button(onClick = { showDebug = !showDebug }, modifier = Modifier.fillMaxWidth()) {
+                                Text(if (showDebug) "Hide Vector Debug" else "Show Vector Debug")
+                            }
+                            
+                            if (showDebug && res.vectors.isNotEmpty()) {
+                                var magFactor by remember { mutableStateOf(5f) }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("Vector Magnification: ${magFactor.toInt()}x", color = Color.White)
+                                Slider(value = magFactor, onValueChange = { magFactor = it }, valueRange = 1f..20f)
+                                
+                                Box(modifier = Modifier.fillMaxWidth().aspectRatio(res.imageWidth.toFloat() / res.imageHeight.toFloat()).border(1.dp, Color.Gray)) {
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        val scaleX = size.width / res.imageWidth
+                                        val scaleY = size.height / res.imageHeight
+                                        
+                                        drawCircle(Color.DarkGray, res.lensRadius.toFloat() * scaleX, Offset(res.geometricCenterX.toFloat() * scaleX, res.geometricCenterY.toFloat() * scaleY), style = Stroke(2f))
+                                        drawCircle(Color.Magenta, 10f, Offset(res.opticalCenterX.toFloat() * scaleX, res.opticalCenterY.toFloat() * scaleY))
+                                        
+                                        val oc = Offset(res.opticalCenterX.toFloat() * scaleX, res.opticalCenterY.toFloat() * scaleY)
+                                        val axLen = res.lensRadius.toFloat() * scaleX
+                                        val rad1 = res.p1Angle * Math.PI / 180.0
+                                        val rad2 = res.p2Angle * Math.PI / 180.0
+                                        drawLine(Color.Cyan, oc - Offset((cos(rad1)*axLen).toFloat(), (sin(rad1)*axLen).toFloat()), oc + Offset((cos(rad1)*axLen).toFloat(), (sin(rad1)*axLen).toFloat()), 3f)
+                                        drawLine(Color.Yellow, oc - Offset((cos(rad2)*axLen).toFloat(), (sin(rad2)*axLen).toFloat()), oc + Offset((cos(rad2)*axLen).toFloat(), (sin(rad2)*axLen).toFloat()), 3f)
+                                        
+                                        for (v in res.vectors) {
+                                            val start = Offset(v.rx.toFloat() * scaleX, v.ry.toFloat() * scaleY)
+                                            val dx = (v.ox - v.rx).toFloat() * scaleX * magFactor
+                                            val dy = (v.oy - v.ry).toFloat() * scaleY * magFactor
+                                            val end = start + Offset(dx, dy)
+                                            drawLine(Color.Red, start, end, 2f)
+                                            drawCircle(Color.White, 3f, start)
+                                        }
                                     }
                                 }
                             }
@@ -313,16 +444,18 @@ fun LensExperimentScreen() {
                     
                     Spacer(modifier = Modifier.height(32.dp))
                     
-                    if (runResults.size >= 3) {
+                    val validRuns = runResults.filter { !it.confidence.startsWith("FAILED") }
+                    
+                    if (validRuns.size >= 3) {
                         Text("REPEATABILITY GATES", color = Color.White, fontWeight = FontWeight.Bold)
                         
-                        val p1Mean = runResults.map { it.p1 }.average()
-                        val p2Mean = runResults.map { it.p2 }.average()
-                        val p1Std = Math.sqrt(runResults.map { Math.pow(it.p1 - p1Mean, 2.0) }.average())
+                        val p1Mean = validRuns.map { it.p1 }.average()
+                        val p2Mean = validRuns.map { it.p2 }.average()
+                        val p1Std = Math.sqrt(validRuns.map { Math.pow(it.p1 - p1Mean, 2.0) }.average())
                         
                         var sumSin = 0.0
                         var sumCos = 0.0
-                        runResults.forEach {
+                        validRuns.forEach {
                             val rad = 2 * it.p1Angle * Math.PI / 180.0
                             sumSin += sin(rad)
                             sumCos += cos(rad)
@@ -330,12 +463,12 @@ fun LensExperimentScreen() {
                         val meanAxisRad = Math.atan2(sumSin, sumCos) / 2.0
                         var meanAxisDeg = meanAxisRad * 180.0 / Math.PI
                         if (meanAxisDeg < 0) meanAxisDeg += 180.0
-                        val R = Math.sqrt(sumSin*sumSin + sumCos*sumCos) / runResults.size
+                        val R = Math.sqrt(sumSin*sumSin + sumCos*sumCos) / validRuns.size
                         val angularDev = Math.sqrt(-2.0 * Math.log(R)) * 180.0 / Math.PI / 2.0
                         
-                        val ocxMean = runResults.map { it.opticalCenterX }.average()
-                        val ocyMean = runResults.map { it.opticalCenterY }.average()
-                        val ocStd = Math.sqrt(runResults.map { hypot(it.opticalCenterX - ocxMean, it.opticalCenterY - ocyMean).pow(2) }.average())
+                        val ocxMean = validRuns.map { it.opticalCenterX }.average()
+                        val ocyMean = validRuns.map { it.opticalCenterY }.average()
+                        val ocStd = Math.sqrt(validRuns.map { hypot(it.opticalCenterX - ocxMean, it.opticalCenterY - ocyMean).pow(2) }.average())
                         
                         ResultRow("P1 Mean", String.format("%.5f ± %.5f", p1Mean, p1Std))
                         ResultRow("P2 Mean", String.format("%.5f", p2Mean))
@@ -372,8 +505,6 @@ fun LensExperimentScreen() {
     }
 }
 
-// ResultRow is already declared in ExperimentScreen.kt
-
 fun proxyToBitmap(image: ImageProxy): Bitmap? {
     val planeProxy = image.planes
     val yBuffer = planeProxy[0].buffer
@@ -400,4 +531,36 @@ fun proxyToBitmap(image: ImageProxy): Bitmap? {
     val matrix = android.graphics.Matrix()
     matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
     return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+}
+
+fun detectLensEllipse(bitmap: Bitmap): RotatedRect? {
+    val mat = org.opencv.core.Mat()
+    org.opencv.android.Utils.bitmapToMat(bitmap, mat)
+    val gray = org.opencv.core.Mat()
+    org.opencv.imgproc.Imgproc.cvtColor(mat, gray, org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY)
+    org.opencv.imgproc.Imgproc.GaussianBlur(gray, gray, org.opencv.core.Size(9.0, 9.0), 2.0, 2.0)
+    
+    val edges = org.opencv.core.Mat()
+    org.opencv.imgproc.Imgproc.Canny(gray, edges, 50.0, 150.0)
+    
+    val contours = mutableListOf<org.opencv.core.MatOfPoint>()
+    val hierarchy = org.opencv.core.Mat()
+    org.opencv.imgproc.Imgproc.findContours(edges, contours, hierarchy, org.opencv.imgproc.Imgproc.RETR_EXTERNAL, org.opencv.imgproc.Imgproc.CHAIN_APPROX_SIMPLE)
+    
+    var bestEllipse: RotatedRect? = null
+    var maxArea = 0.0
+    
+    for (c in contours) {
+        if (c.toArray().size >= 5) {
+            val pt2f = org.opencv.core.MatOfPoint2f(*c.toArray())
+            val ellipse = org.opencv.imgproc.Imgproc.fitEllipse(pt2f)
+            val area = Math.PI * (ellipse.size.width / 2.0) * (ellipse.size.height / 2.0)
+            if (area > maxArea && area > (gray.cols() * gray.rows() * 0.05)) {
+                maxArea = area
+                bestEllipse = ellipse
+            }
+        }
+    }
+    mat.release(); gray.release(); edges.release(); hierarchy.release()
+    return bestEllipse
 }

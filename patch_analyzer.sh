@@ -4,6 +4,7 @@ package com.example.analysis
 import android.graphics.Bitmap
 import com.example.model.LensMeasurementResult
 import com.example.model.DisplacementVector
+import com.example.model.LensGeometry
 import org.opencv.android.Utils
 import org.opencv.calib3d.Calib3d
 import org.opencv.core.Core
@@ -16,32 +17,53 @@ import kotlin.math.*
 
 object LensAnalyzer {
     
-    fun analyze(noLensFrames: List<Bitmap>, withLensFrames: List<Bitmap>): LensMeasurementResult {
+    fun analyze(noLensFrames: List<Bitmap>, withLensFrames: List<Bitmap>, lensGeom: LensGeometry?): LensMeasurementResult {
         if (noLensFrames.isEmpty() || withLensFrames.isEmpty()) {
             return emptyResult("LOW - Missing Frames")
+        }
+        if (lensGeom == null) {
+            return emptyResult("LOW - Missing Lens Geometry")
         }
 
         val width = noLensFrames[0].width
         val height = noLensFrames[0].height
         val cx = width / 2.0
         val cy = height / 2.0
-        val lensRadius = min(width, height) * 0.35
+        val lensRadius = max(lensGeom.width, lensGeom.height) / 2.0
         
         // 1. Multi-frame averaging / median of dots
         val refDots = extractStableDots(noLensFrames)
         val testDotsLocal = extractStableDots(withLensFrames)
         
+        val angleRad = lensGeom.rotationAngle * PI / 180.0
+        val cosA = cos(angleRad)
+        val sinA = sin(angleRad)
+        val rx = lensGeom.width / 2.0
+        val ry = lensGeom.height / 2.0
+        
+        fun getNormalizedRadiusSq(p: Point): Double {
+            val dx = p.x - lensGeom.centerX
+            val dy = p.y - lensGeom.centerY
+            val localX = dx * cosA + dy * sinA
+            val localY = -dx * sinA + dy * cosA
+            val nx = if (rx > 0) localX / rx else 0.0
+            val ny = if (ry > 0) localY / ry else 0.0
+            return nx * nx + ny * ny
+        }
+
         // Split dots
         val refInner = mutableListOf<Point>(); val refOuter = mutableListOf<Point>()
         for (p in refDots) {
-            if (hypot(p.x - cx, p.y - cy) < lensRadius * 0.9) refInner.add(p)
-            else if (hypot(p.x - cx, p.y - cy) > lensRadius * 1.1) refOuter.add(p)
+            val rSq = getNormalizedRadiusSq(p)
+            if (rSq < 0.81) refInner.add(p) // 0.9^2
+            else if (rSq > 1.21) refOuter.add(p) // 1.1^2
         }
         
         val testInnerLocal = mutableListOf<Point>(); val testOuterLocal = mutableListOf<Point>()
         for (p in testDotsLocal) {
-            if (hypot(p.x - cx, p.y - cy) < lensRadius * 0.9) testInnerLocal.add(p)
-            else if (hypot(p.x - cx, p.y - cy) > lensRadius * 1.1) testOuterLocal.add(p)
+            val rSq = getNormalizedRadiusSq(p)
+            if (rSq < 0.81) testInnerLocal.add(p)
+            else if (rSq > 1.21) testOuterLocal.add(p)
         }
         
         // 2. Global Registration (using REAL OpenCV Homography)
@@ -77,15 +99,16 @@ object LensAnalyzer {
                 val dstMat = MatOfPoint2f(*matchedDst.toTypedArray())
                 val mask = Mat()
                 
-                homography = Calib3d.findHomography(srcMat, dstMat, Calib3d.RANSAC, 5.0, mask)
+                val H = Calib3d.findHomography(srcMat, dstMat, Calib3d.RANSAC, 5.0, mask)
                 
-                if (!homography.empty()) {
+                if (!H.empty()) {
+                    homography = H
                     inliersCount = Core.countNonZero(mask)
                     var sqErr = 0.0
                     val maskArray = ByteArray(mask.rows() * mask.cols())
                     mask.get(0, 0, maskArray)
                     val transformed = MatOfPoint2f()
-                    Core.perspectiveTransform(srcMat, transformed)
+                    Core.perspectiveTransform(srcMat, transformed, homography)
                     val transArr = transformed.toArray()
                     for (i in matchedSrc.indices) {
                         if (maskArray[i].toInt() != 0) {
@@ -93,8 +116,6 @@ object LensAnalyzer {
                         }
                     }
                     registrationRms = if (inliersCount > 0) sqrt(sqErr / inliersCount) else 0.0
-                } else {
-                    homography = Mat.eye(3, 3, CvType.CV_64F)
                 }
             }
         }
@@ -104,7 +125,7 @@ object LensAnalyzer {
         if (!homography.empty() && testInnerLocal.isNotEmpty()) {
             val srcPts = MatOfPoint2f(*testInnerLocal.toTypedArray())
             val dstPts = MatOfPoint2f()
-            Core.perspectiveTransform(srcPts, dstPts)
+            Core.perspectiveTransform(srcPts, dstPts, homography)
             testInner.addAll(dstPts.toList())
         } else {
             testInner.addAll(testInnerLocal)
@@ -131,6 +152,16 @@ object LensAnalyzer {
         }
         
         val trackedCount = validMatches.size
+        
+        // Quality Gates
+        if (homography.empty() || inliersCount < 20 || registrationRms.isNaN() || registrationRms.isInfinite() || trackedCount < 30) {
+            val reason = if (homography.empty()) "Homography failed"
+                         else if (inliersCount < 20) "Low RANSAC inliers"
+                         else if (registrationRms.isNaN() || registrationRms.isInfinite()) "Invalid RMS"
+                         else "Low tracked points"
+            return emptyResult("FAILED - \$reason")
+        }
+
         val vectors = mutableListOf<DisplacementVector>()
         var meanDx = 0.0; var meanDy = 0.0
         
@@ -149,31 +180,31 @@ object LensAnalyzer {
         var L1 = 0.0; var L2 = 0.0; var theta1 = 0.0; var theta2 = 0.0
         var optCx = cx; var optCy = cy
         
-        if (trackedCount >= 30) {
-            val fieldAffine = computeAffine(pointsX, disps)
-            if (fieldAffine != null) {
-                val A = fieldAffine[0]; val B = fieldAffine[1]; val C = fieldAffine[2]
-                val D = fieldAffine[3]; val E = fieldAffine[4]; val F = fieldAffine[5]
-                
-                val detA = A * E - B * D
-                if (abs(detA) > 1e-8) {
-                    val X_oc = (B * F - C * E) / detA
-                    val Y_oc = (C * D - A * F) / detA
-                    optCx = cx + X_oc
-                    optCy = cy + Y_oc
-                }
-                
-                val Sxy = (B + D) / 2.0
-                val tr = A + E
-                val detS = A * E - Sxy * Sxy
-                val root = sqrt(max(0.0, tr * tr / 4.0 - detS))
-                L1 = tr / 2.0 + root
-                L2 = tr / 2.0 - root
-                
-                theta1 = atan2(L1 - A, Sxy) * 180.0 / PI
-                if (theta1 < 0) theta1 += 180.0
-                theta2 = theta1 + 90.0
+        val fieldAffine = computeAffine(pointsX, disps)
+        if (fieldAffine != null) {
+            val A = fieldAffine[0]; val B = fieldAffine[1]; val C = fieldAffine[2]
+            val D = fieldAffine[3]; val E = fieldAffine[4]; val F = fieldAffine[5]
+            
+            val detA = A * E - B * D
+            if (abs(detA) > 1e-8) {
+                val X_oc = (B * F - C * E) / detA
+                val Y_oc = (C * D - A * F) / detA
+                optCx = cx + X_oc
+                optCy = cy + Y_oc
             }
+            
+            val Sxy = (B + D) / 2.0
+            val tr = A + E
+            val detS = A * E - Sxy * Sxy
+            val root = sqrt(max(0.0, tr * tr / 4.0 - detS))
+            L1 = tr / 2.0 + root
+            L2 = tr / 2.0 - root
+            
+            theta1 = atan2(L1 - A, Sxy) * 180.0 / PI
+            var t1Deg = theta1
+            if (t1Deg < 0) t1Deg += 180.0
+            theta1 = t1Deg
+            theta2 = t1Deg + 90.0
         }
         
         val confidence = if (trackedCount >= 100 && registrationRms < 3.0) "HIGH" 
@@ -192,7 +223,7 @@ object LensAnalyzer {
             registrationRms = registrationRms,
             ransacInliers = inliersCount,
             imageWidth = width, imageHeight = height,
-            geometricCenterX = cx, geometricCenterY = cy,
+            geometricCenterX = lensGeom.centerX, geometricCenterY = lensGeom.centerY,
             opticalCenterX = optCx, opticalCenterY = optCy,
             lensRadius = lensRadius,
             vectors = vectors
@@ -275,7 +306,8 @@ object LensAnalyzer {
 
     class LocalPoint(val x: Double, val y: Double)
 
-    private fun computeAffine(src: List<LocalPoint>, dst: List<LocalPoint>): DoubleArray? {
+    // Make computeAffine public for testing
+    fun computeAffine(src: List<LocalPoint>, dst: List<LocalPoint>): DoubleArray? {
         if (src.size < 3) return null
         var sx = 0.0; var sy = 0.0; var sxx = 0.0; var syy = 0.0; var sxy = 0.0
         var su = 0.0; var sux = 0.0; var suy = 0.0
