@@ -113,23 +113,22 @@ fun LensExperimentScreen() {
         }
     }
 
-    val lifecycle = lifecycleOwner.lifecycle
     DisposableEffect(lifecycleOwner) {
         val analysisExecutor = Executors.newSingleThreadExecutor()
+        var isDisposed = false
         var imageAnalysisRef: ImageAnalysis? = null
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build()
-                    previewRef = preview
-                    
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                        .also { analysis ->
+        cameraProviderFuture.addListener({
+            if (isDisposed) return@addListener
+            val cameraProvider = cameraProviderFuture.get()
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (isDisposed) return@postDelayed
+                val preview = Preview.Builder().build()
+                previewRef = preview
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { analysis ->
                         analysis.setAnalyzer(analysisExecutor) { imageProxy ->
                             try {
                                 if (phase == LensExperimentPhase.ALIGN_LENS) {
@@ -215,41 +214,35 @@ fun LensExperimentScreen() {
                             }
                         }
                     }
-                    imageAnalysisRef = imageAnalysis
-                    
-                    try {
-                        cameraProvider.unbindAll()
-                        val camera = cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            imageAnalysis
-                        )
-                        cameraControlRef = camera.cameraControl
-                        camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)
-                    } catch (exc: Exception) {}
-                }, ContextCompat.getMainExecutor(context))
-            } else if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) {
+                imageAnalysisRef = imageAnalysis
+                try {
+                    previewRef?.let { cameraProvider.unbind(it) }
+                    imageAnalysisRef?.let { cameraProvider.unbind(it) }
+                    val camera = cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        imageAnalysis
+                    )
+                    cameraControlRef = camera.cameraControl
+                    camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)
+                } catch (exc: Exception) {}
+            }, 300)
+        }, ContextCompat.getMainExecutor(context))
+        onDispose {
+            isDisposed = true
+            imageAnalysisRef?.clearAnalyzer()
+            try {
                 if (cameraProviderFuture.isDone) {
                     val provider = cameraProviderFuture.get()
-                    imageAnalysisRef?.clearAnalyzer()
-                    provider.unbindAll()
+                    previewRef?.let { provider.unbind(it) }
+                    imageAnalysisRef?.let { provider.unbind(it) }
                 }
-            }
-        }
-        
-        lifecycle.addObserver(observer)
-        
-        onDispose {
-            lifecycle.removeObserver(observer)
-            if (cameraProviderFuture.isDone) {
-                val provider = cameraProviderFuture.get()
-                imageAnalysisRef?.clearAnalyzer()
-                provider.unbindAll()
-            }
+            } catch (e: Exception) {}
             analysisExecutor.shutdown()
         }
     }
+
     suspend fun runCaptureSequence(targetList: MutableList<Bitmap>, lockAE: Boolean) {
         targetList.clear()
         
@@ -606,3 +599,10 @@ fun detectLensEllipse(bitmap: Bitmap): RotatedRect? {
     return bestEllipse
 }
 
+@Composable
+fun ResultRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.LightGray)
+        Text(value, color = Color.White, fontWeight = FontWeight.Bold)
+    }
+}

@@ -111,77 +111,68 @@ fun ExperimentScreen() {
 
     val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE } }
 
+    val lifecycle = lifecycleOwner.lifecycle
     DisposableEffect(lifecycleOwner) {
         val analysisExecutor = Executors.newSingleThreadExecutor()
-        var isDisposed = false
+        var imageAnalysisRef: ImageAnalysis? = null
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
-        cameraProviderFuture.addListener({
-            if (isDisposed) return@addListener
-            val cameraProvider = cameraProviderFuture.get()
-
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
-            }
-            previewRef = preview
-
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also { analysis ->
-                    analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                        try {
-                            val isFlashActive = torchEnabled
-                            val isWithLensActive = (currentStep == ExperimentStep.STEP_3_LENS_1 || currentStep == ExperimentStep.STEP_4_LENS_2)
-                            
-                            val measurement = OpticalAnalyzer.analyzeFrame(
-                                imageProxy = imageProxy,
-                                frameIndex = 0,
-                                isFlashOn = isFlashActive,
-                                isWithLens = isWithLensActive
-                            )
-
-                            liveAvgLum = measurement.avgLuminance
-                            liveSharpness = measurement.sharpness
-                            liveBrightPx = measurement.brightPixelPercentage
-                            liveReflections.value = measurement.reflectionCandidates
-
-                            frameCaptureCallback?.invoke(imageProxy)
-                        } finally {
-                            imageProxy.close()
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                cameraProviderFuture.addListener({
+                    val cameraProvider = cameraProviderFuture.get()
+                    val preview = Preview.Builder().build()
+                    previewRef = preview
+                    
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also { analysis ->
+                            analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                                try {
+                                    frameCaptureCallback?.invoke(imageProxy)
+                                } finally {
+                                    imageProxy.close()
+                                }
+                            }
                         }
+                    imageAnalysisRef = imageAnalysis
+                    
+                    try {
+                        cameraProvider.unbindAll()
+                        val camera = cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                            imageAnalysis
+                        )
+                        cameraControlRef = camera.cameraControl
+                        flashAvailable = camera.cameraInfo.hasFlashUnit()
+                    } catch (exc: Exception) {
+                        flashAvailable = false
                     }
-                }
-            imageAnalysisRef = imageAnalysis
-
-            try {
-                val camera = cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    imageAnalysis
-                )
-                cameraControlRef = camera.cameraControl
-                flashAvailable = camera.cameraInfo.hasFlashUnit()
-            } catch (exc: Exception) {
-                flashAvailable = false
-            }
-        }, ContextCompat.getMainExecutor(context))
-
-        onDispose {
-            isDisposed = true
-            imageAnalysisRef?.clearAnalyzer()
-            try {
+                }, ContextCompat.getMainExecutor(context))
+            } else if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) {
                 if (cameraProviderFuture.isDone) {
                     val provider = cameraProviderFuture.get()
-                    previewRef?.let { provider.unbind(it) }
-                    imageAnalysisRef?.let { provider.unbind(it) }
+                    imageAnalysisRef?.clearAnalyzer()
+                    provider.unbindAll()
                 }
-            } catch (e: Exception) {}
+            }
+        }
+        
+        lifecycle.addObserver(observer)
+        
+        onDispose {
+            lifecycle.removeObserver(observer)
+            if (cameraProviderFuture.isDone) {
+                val provider = cameraProviderFuture.get()
+                imageAnalysisRef?.clearAnalyzer()
+                provider.unbindAll()
+            }
             analysisExecutor.shutdown()
         }
     }
-
     suspend fun runCaptureSequence(phaseName: String, targetList: androidx.compose.runtime.snapshots.SnapshotStateList<FrameMeasurement>) {
         isProcessing = true
         targetList.clear()

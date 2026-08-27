@@ -1,4 +1,3 @@
-cat << 'INNER_EOF' > temp_disp_start.kt
     val lifecycle = lifecycleOwner.lifecycle
     DisposableEffect(lifecycleOwner) {
         val analysisExecutor = Executors.newSingleThreadExecutor()
@@ -16,9 +15,26 @@ cat << 'INNER_EOF' > temp_disp_start.kt
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also { analysis ->
-INNER_EOF
-
-cat << 'INNER_EOF' > temp_disp_end.kt
+                            analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                                try {
+                                    val bitmap = proxyToBitmap(imageProxy)
+                                    if (bitmap != null) {
+                                        val focusScore = calculateFocusScore(bitmap)
+                                        currentFocusScore = focusScore
+                                        if (focusScore > maxFocusScore) {
+                                            maxFocusScore = focusScore
+                                        }
+                                        
+                                        if (phase == FocusPhase.MEASURING) {
+                                            frameCaptureCallback?.invoke(bitmap, focusScore)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                } finally {
+                                    imageProxy.close()
+                                }
+                            }
                         }
                     imageAnalysisRef = imageAnalysis
                     
@@ -55,45 +71,3 @@ cat << 'INNER_EOF' > temp_disp_end.kt
             analysisExecutor.shutdown()
         }
     }
-INNER_EOF
-
-awk '
-BEGIN { block_start = 0; block_end = 0; printed = 0 }
-/DisposableEffect\(lifecycleOwner\) \{/ {
-    if (!printed) {
-        block_start = 1
-        system("cat temp_disp_start.kt")
-        next
-    }
-}
-/analysis.setAnalyzer\(analysisExecutor\)/ {
-    if (block_start && !block_end) {
-        in_analyzer = 1
-        print
-        next
-    }
-}
-/imageAnalysisRef = imageAnalysis/ {
-    if (in_analyzer) {
-        in_analyzer = 0
-        block_end = 1
-        system("cat temp_disp_end.kt")
-        next
-    }
-}
-/suspend fun runCaptureSequence/ {
-    if (block_start) {
-        block_start = 0
-        block_end = 0
-        printed = 1
-    }
-}
-{
-    if (in_analyzer) {
-        print
-    } else if (!block_start) {
-        print
-    }
-}
-' app/src/main/java/com/example/ui/LensExperimentScreen.kt > temp_screen.kt
-mv temp_screen.kt app/src/main/java/com/example/ui/LensExperimentScreen.kt
