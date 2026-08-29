@@ -439,7 +439,7 @@ object V4OpticalAnalyzer {
         return dists[dists.size / 2]
     }
 
-    private fun assignGridTopology(points: List<Point>, spacing: Double): Map<Pair<Int, Int>, Point> {
+    private fun assignGridTopology(points: List<Point>, spacing: Double, rejections: MutableMap<String, Int> = mutableMapOf()): Map<Pair<Int, Int>, Point> {
         if (points.isEmpty()) return emptyMap()
         
         val angles = mutableListOf<Double>()
@@ -451,9 +451,9 @@ object V4OpticalAnalyzer {
                 val dy = p2.y - p1.y
                 val dist = hypot(dx, dy)
                 if (dist > spacing * 0.5 && dist < spacing * 1.5) {
-                    var a = atan2(dy, dx)
-                    while (a < 0) a += PI / 2.0
-                    while (a >= PI / 2.0) a -= PI / 2.0
+                    var a = Math.atan2(dy, dx)
+                    while (a < 0) a += Math.PI / 2.0
+                    while (a >= Math.PI / 2.0) a -= Math.PI / 2.0
                     angles.add(a)
                 }
             }
@@ -464,13 +464,18 @@ object V4OpticalAnalyzer {
             angles[angles.size / 2]
         } else 0.0
         
-        val cosA = cos(-medianAngle)
-        val sinA = sin(-medianAngle)
+        val cosA = Math.cos(-medianAngle)
+        val sinA = Math.sin(-medianAngle)
         
         val cx = points.map { it.x }.average()
         val cy = points.map { it.y }.average()
         
         val grid = mutableMapOf<Pair<Int, Int>, Point>()
+        
+        var assigned = 0
+        var ambiguous = 0
+        var collisions = 0
+        
         for (p in points) {
             val tx = p.x - cx
             val ty = p.y - cy
@@ -480,13 +485,36 @@ object V4OpticalAnalyzer {
             val col = (rx / spacing).roundToInt()
             val row = (ry / spacing).roundToInt()
             
-            var finalR = row
-            var finalC = col
-            while (grid.containsKey(Pair(finalR, finalC))) {
-                finalC++
+            val coord = Pair(row, col)
+            if (grid.containsKey(coord)) {
+                collisions++
+                val existing = grid[coord]!!
+                
+                val idealRx = col * spacing
+                val idealRy = row * spacing
+                
+                val extTx = existing.x - cx
+                val extTy = existing.y - cy
+                val erx = extTx * cosA - extTy * sinA
+                val ery = extTx * sinA + extTy * cosA
+                
+                val eDistSq = (erx - idealRx)*(erx - idealRx) + (ery - idealRy)*(ery - idealRy)
+                val pDistSq = (rx - idealRx)*(rx - idealRx) + (ry - idealRy)*(ry - idealRy)
+                
+                if (pDistSq < eDistSq) {
+                    grid[coord] = p
+                    ambiguous++
+                } else {
+                    ambiguous++
+                }
+            } else {
+                grid[coord] = p
+                assigned++
             }
-            grid[Pair(finalR, finalC)] = p
         }
+        rejections["gridAssigned"] = grid.size
+        rejections["gridAmbiguous"] = ambiguous
+        rejections["gridCollisions"] = collisions
         return grid
     }
 
@@ -524,7 +552,7 @@ object V4OpticalAnalyzer {
             val w = noLensFrames[0].width.toDouble()
             val h = noLensFrames[0].height.toDouble()
             
-            val gridMap = assignGridTopology(baseRefPoints, spacing)
+            val gridMap = assignGridTopology(baseRefPoints, spacing, rejections)
 
             val binSize = spacing * 0.2
             val histogram = HashMap<Pair<Int, Int>, Int>()
@@ -550,36 +578,60 @@ object V4OpticalAnalyzer {
                 }
             }
             
+
             val globalTx = bestBin.first * binSize
             val globalTy = bestBin.second * binSize
-            
+
+            // TASK 2 - USE MUTUAL NEAREST-NEIGHBOR SEEDING
             val acceptedMatches = mutableMapOf<Pair<Int, Int>, Point>()
-            
+            var nonMutualCount = 0
+            var seedDistanceRejects = 0
+
             for ((coord, ptRef) in gridMap) {
                 val shiftedX = ptRef.x + globalTx
                 val shiftedY = ptRef.y + globalTy
                 
-                var bestDist = Double.MAX_VALUE
+                var bestDistRefToLens = Double.MAX_VALUE
                 var bestLens: Point? = null
                 for (ptLens in baseLensPoints) {
                     val dist = hypot(ptLens.x - shiftedX, ptLens.y - shiftedY)
-                    if (dist < bestDist) {
-                        bestDist = dist
+                    if (dist < bestDistRefToLens) {
+                        bestDistRefToLens = dist
                         bestLens = ptLens
                     }
                 }
                 
-                if (bestLens != null && bestDist < spacing * 0.8) {
-                    if (!acceptedMatches.containsValue(bestLens)) {
-                        acceptedMatches[coord] = bestLens
+                if (bestLens != null && bestDistRefToLens < spacing * 0.4) {
+                    // Check mutual nearest-neighbor
+                    var bestDistLensToRef = Double.MAX_VALUE
+                    var bestRefCoord: Pair<Int, Int>? = null
+                    for ((c, rPt) in gridMap) {
+                        val sX = rPt.x + globalTx
+                        val sY = rPt.y + globalTy
+                        val d = hypot(bestLens.x - sX, bestLens.y - sY)
+                        if (d < bestDistLensToRef) {
+                            bestDistLensToRef = d
+                            bestRefCoord = c
+                        }
                     }
+                    if (bestRefCoord == coord) {
+                        acceptedMatches[coord] = bestLens
+                    } else {
+                        nonMutualCount++
+                    }
+                } else if (bestLens != null) {
+                    seedDistanceRejects++
                 }
             }
+            rejections["seedMutualMatches"] = acceptedMatches.size
+            rejections["seed_distance"] = seedDistanceRejects
+            rejections["non_mutual"] = nonMutualCount
 
+            // TASK 3 - KEEP EXPANSION FLEXIBLE
+            // Stage A: Topological neighbor expansion
             var changed = true
             while (changed) {
                 changed = false
-                
                 for ((coord, ptRef) in gridMap) {
                     if (acceptedMatches.containsKey(coord)) continue
                     
@@ -621,7 +673,9 @@ object V4OpticalAnalyzer {
                     }
                 }
             }
-            
+            rejections["neighborExpandedMatches"] = acceptedMatches.size
+
+            // Stage B: Robust affine prediction expansion
             if (acceptedMatches.size >= 10) {
                 val srcList = acceptedMatches.values.map { gridMap[acceptedMatches.entries.find { e -> e.value == it }!!.key]!! }
                 val dstList = acceptedMatches.values.toList()
@@ -651,15 +705,81 @@ object V4OpticalAnalyzer {
                             }
                         }
                         
-                        if (bestLens != null && bestDist < spacing * 0.7) {
+                        if (bestLens != null && bestDist < spacing * 0.8) {
                             acceptedMatches[coord] = bestLens
                         }
                     }
                 }
             }
+            rejections["affineExpandedMatches"] = acceptedMatches.size
+
+            // TASK 4 - GLOBAL ONE-TO-ONE ASSIGNMENT
+            val finalMatches = mutableMapOf<Pair<Int, Int>, Point>()
+            var assignmentConflicts = 0
+            val usedLensPts = mutableSetOf<Point>()
             
+            // Build proposals based on existing acceptedMatches (these were accumulated iteratively)
+            // But wait, the prompt says:
+            // "After prediction, do not greedily assign dots one by one.
+            // Build a cost matrix between predicted reference positions and available lens dots... Use globally sorted minimum-cost assignment with conflict resolution"
+            // To do this, we can take the affine model (if valid) or local neighbor predictions, predict ALL grid points, and do a global match.
+            // Actually, let's just collect ALL predicted positions for ALL grid map points based on affine or globalTx.
+            
+            val predictedPositions = mutableMapOf<Pair<Int, Int>, Point>()
+            
+            // Re-estimate affine with all current accepted matches to predict all points
+            val affineGlobal = if (acceptedMatches.size >= 10) {
+                val sList = acceptedMatches.values.map { gridMap[acceptedMatches.entries.find { e -> e.value == it }!!.key]!! }
+                val dList = acceptedMatches.values.toList()
+                val sMat = MatOfPoint2f().apply { fromList(sList) }
+                val dMat = MatOfPoint2f().apply { fromList(dList) }
+                Calib3d.estimateAffine2D(sMat, dMat, Mat(), Calib3d.RANSAC, spacing * 0.5)
+            } else Mat()
+
+            for ((coord, ptRef) in gridMap) {
+                if (!affineGlobal.empty()) {
+                    val ptMat = MatOfPoint2f(ptRef)
+                    val predMat = MatOfPoint2f()
+                    Core.transform(ptMat, predMat, affineGlobal)
+                    predictedPositions[coord] = Point(predMat.toArray()[0].x, predMat.toArray()[0].y)
+                } else {
+                    predictedPositions[coord] = Point(ptRef.x + globalTx, ptRef.y + globalTy)
+                }
+            }
+
+            // Create list of all (Coord, LensPoint, Distance)
+            val proposals = mutableListOf<Triple<Pair<Int, Int>, Point, Double>>()
+            for ((coord, predPt) in predictedPositions) {
+                for (ptLens in baseLensPoints) {
+                    val dist = hypot(ptLens.x - predPt.x, ptLens.y - predPt.y)
+                    if (dist < spacing * 0.8) {
+                        proposals.add(Triple(coord, ptLens, dist))
+                    }
+                }
+            }
+            
+            // Sort by distance (cost)
+            proposals.sortBy { it.third }
+            
+            for (proposal in proposals) {
+                val coord = proposal.first
+                val lensPt = proposal.second
+                if (!finalMatches.containsKey(coord) && !usedLensPts.contains(lensPt)) {
+                    finalMatches[coord] = lensPt
+                    usedLensPts.add(lensPt)
+                } else {
+                    assignmentConflicts++
+                }
+            }
+            rejections["assignment_conflict"] = assignmentConflicts
+            
+            acceptedMatches.clear()
+            acceptedMatches.putAll(finalMatches)
+            rejections["finalMatches"] = acceptedMatches.size
+
             val candidateRef = mutableListOf<Point>()
             val candidateLens = mutableListOf<Point>()
+
             
             val rejectedRefs = mutableListOf<Point>()
             for ((coord, ptRef) in gridMap) {
@@ -677,8 +797,32 @@ object V4OpticalAnalyzer {
             
             val cx = w / 2.0
             val cy = h / 2.0
+            var q1 = 0; var q2 = 0; var q3 = 0; var q4 = 0
+            for (pt in candidateRef) {
+                if (pt.x < cx && pt.y < cy) q1++
+                if (pt.x >= cx && pt.y < cy) q2++
+                if (pt.x < cx && pt.y >= cy) q3++
+                if (pt.x >= cx && pt.y >= cy) q4++
+            }
+            rejections["Quad1_Matches"] = q1
+            rejections["Quad2_Matches"] = q2
+            rejections["Quad3_Matches"] = q3
+            rejections["Quad4_Matches"] = q4
+            
+            val quads = listOf(q1, q2, q3, q4).count { it > 0 }
+            val coverage = if (baseRefPoints.isNotEmpty()) candidateRef.size.toDouble() / baseRefPoints.size else 0.0
+            
+            if (candidateRef.size < 20 || quads < 3 || coverage < 0.4) {
+                return@withContext V4RunResult(
+                    success = false, 
+                    errorMessage = "INSUFFICIENT SPATIAL CORRESPONDENCE (Matches: ${candidateRef.size}, Quads: $quads, Coverage: ${String.format("%.1f", coverage*100)}%)",
+                    measurementQualityPass = false,
+                    qualityMessage = "INSUFFICIENT SPATIAL CORRESPONDENCE"
+                )
+            }
             
             // --- STABILITY GATE ---
+
             val stabilityResults = mutableListOf<V4RunResult>()
             val checkCount = kotlin.math.min(15, withLensFrames.size)
             val checkFrames = withLensFrames.takeLast(checkCount)
@@ -757,18 +901,6 @@ object V4OpticalAnalyzer {
                 stabilityMsg = "Not enough valid frames for stability check"
             }
             // --- END STABILITY GATE ---
-var q1 = 0; var q2 = 0; var q3 = 0; var q4 = 0
-            for (pt in candidateRef) {
-                if (pt.x < cx && pt.y < cy) q1++
-                if (pt.x >= cx && pt.y < cy) q2++
-                if (pt.x < cx && pt.y >= cy) q3++
-                if (pt.x >= cx && pt.y >= cy) q4++
-            }
-            rejections["Quad1_Matches"] = q1
-            rejections["Quad2_Matches"] = q2
-            rejections["Quad3_Matches"] = q3
-            rejections["Quad4_Matches"] = q4
-            
             val res = analyzePoints(candidateRef, candidateLens, w, h, baseRefPoints.size, baseLensPoints.size, spacing, rejections)
             
             return@withContext res.copy(
@@ -826,9 +958,13 @@ var q1 = 0; var q2 = 0; var q3 = 0; var q4 = 0
             
             val regSrc: List<Point>
             val regDst: List<Point>
+            var modelName = "Affine_OuterAnchors"
+            var fallbackTriggered = false
             if (useRigidFallback) {
                 regSrc = matchedLens
                 regDst = matchedRef
+                modelName = "RIGID_FALLBACK_UNTRUSTED"
+                fallbackTriggered = true
             } else {
                 regSrc = anchorLens
                 regDst = anchorRef
