@@ -1,4 +1,10 @@
-package com.example.analysis
+import re
+
+with open('app/src/test/java/com/example/analysis/V4OpticalAnalyzerTest.kt', 'r') as f:
+    content = f.read()
+
+# I will just write a clean version of the test file
+clean_content = """package com.example.analysis
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -122,3 +128,7 @@ class V4OpticalAnalyzerTest {
         assertTrue(!result.success)
     }
 }
+"""
+
+with open('app/src/test/java/com/example/analysis/V4OpticalAnalyzerTest.kt', 'w') as f:
+    f.write(clean_content)

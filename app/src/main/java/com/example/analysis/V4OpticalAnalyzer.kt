@@ -64,11 +64,17 @@ data class V4RunResult(
     val globalScaleAmbiguous: Boolean = false,
     val framesCaptured: Int = 0,
     val framesAccepted: Int = 0,
-    val framesRejected: Int = 0
+    val framesRejected: Int = 0,
+    val candidateMatches: Int = 0,
+    val acceptedMatches: Int = 0,
+    val rejectedMatches: Int = 0,
+    val matrixRank: Int = 0,
+    val conditionNumber: Double = 0.0,
+    val degeneracyStatus: String = "OK"
 )
 
 object V4OpticalAnalyzer {
-    fun analyzePoints(matchedRef: List<Point>, matchedLens: List<Point>, w: Double, h: Double): V4RunResult {
+    fun analyzePoints(matchedRef: List<Point>, matchedLens: List<Point>, w: Double, h: Double, baseRefDotCount: Int = 0, baseLensDotCount: Int = 0): V4RunResult {
         try {
             val cx = w / 2.0
             val cy = h / 2.0
@@ -115,14 +121,23 @@ object V4OpticalAnalyzer {
             
             val mask = Mat()
             val transformMat: Mat
+            
+            val ransacThresh = if (useRigidFallback) 15.0 else 5.0
+            
             if (useRigidFallback) {
-                transformMat = Calib3d.estimateAffinePartial2D(srcMat, dstMat, mask, Calib3d.RANSAC, 3.0)
+                if (matchedRef.size < 3) {
+                     return V4RunResult(success = false, errorMessage = "Insufficient matched points (<3)", candidateMatches = matchedRef.size)
+                }
+                transformMat = Calib3d.estimateAffinePartial2D(srcMat, dstMat, mask, Calib3d.RANSAC, ransacThresh)
             } else {
-                transformMat = Calib3d.findHomography(srcMat, dstMat, Calib3d.RANSAC, 3.0, mask)
+                if (anchorRef.size < 4) {
+                     return V4RunResult(success = false, errorMessage = "Insufficient anchors (<4)", candidateMatches = matchedRef.size)
+                }
+                transformMat = Calib3d.findHomography(srcMat, dstMat, Calib3d.RANSAC, ransacThresh, mask)
             }
             
             if (transformMat.empty()) {
-                return V4RunResult(success = false, errorMessage = "Registration failed")
+                return V4RunResult(success = false, errorMessage = "Registration failed", candidateMatches = matchedRef.size)
             }
             
             val maskArray = ByteArray(mask.rows() * mask.cols())
@@ -132,8 +147,8 @@ object V4OpticalAnalyzer {
             val ptsToMeasureRef = if (useRigidFallback) matchedRef else measurementRef
             val ptsToMeasureLens = if (useRigidFallback) matchedLens else measurementLens
             
-            if (ptsToMeasureRef.isEmpty()) {
-                 return V4RunResult(success = false, errorMessage = "No measurement points")
+            if (ptsToMeasureRef.size < 6) {
+                 return V4RunResult(success = false, errorMessage = "Insufficient measurement points (<6)", candidateMatches = matchedRef.size, acceptedMatches = inliersCount)
             }
             
             val srcMeasMat = MatOfPoint2f()
@@ -194,13 +209,54 @@ object V4OpticalAnalyzer {
                 B.put(i, 1, transformedLens[i].y - ptsToMeasureRef[i].y)
             }
             
+            val W = Mat()
+            val U = Mat()
+            val Vt = Mat()
+            Core.SVDecomp(A, W, U, Vt)
+            
+            var rank = 0
+            var maxSingular = 0.0
+            var minSingular = Double.MAX_VALUE
+            for (i in 0 until W.rows()) {
+                val s = W.get(i, 0)[0]
+                if (s > maxSingular) maxSingular = s
+                if (s > 1e-6) {
+                    rank++
+                    if (s < minSingular) minSingular = s
+                }
+            }
+            val cond = if (minSingular > 0.0) maxSingular / minSingular else Double.MAX_VALUE
+            
+            var degeneracyStatus = "OK"
+            if (rank < 3) {
+                degeneracyStatus = "RANK_DEFICIENT"
+            } else if (cond > 1e4 || cond.isNaN()) {
+                degeneracyStatus = "ILL_CONDITIONED"
+            }
+            
+            if (degeneracyStatus != "OK") {
+                 return V4RunResult(success = false, errorMessage = "Degenerate geometric configuration: $degeneracyStatus",
+                     candidateMatches = matchedRef.size, acceptedMatches = inliersCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = degeneracyStatus)
+            }
+            
             val J_matrix = Mat()
-            Core.solve(A, B, J_matrix, Core.DECOMP_SVD)
+            try {
+                Core.solve(A, B, J_matrix, Core.DECOMP_SVD)
+            } catch (e: Exception) {
+                return V4RunResult(success = false, errorMessage = "OpenCV solve failed: ${e.message}",
+                     candidateMatches = matchedRef.size, acceptedMatches = inliersCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "SOLVE_EXCEPTION")
+            }
             
             val j00 = J_matrix.get(0, 0)[0]
             val j10 = J_matrix.get(0, 1)[0]
             val j01 = J_matrix.get(1, 0)[0]
             val j11 = J_matrix.get(1, 1)[0]
+            
+            if (j00.isNaN() || j10.isNaN() || j01.isNaN() || j11.isNaN() ||
+                j00.isInfinite() || j10.isInfinite() || j01.isInfinite() || j11.isInfinite()) {
+                return V4RunResult(success = false, errorMessage = "NaN/Infinity in optical field solution",
+                     candidateMatches = matchedRef.size, acceptedMatches = inliersCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "NAN_INF")
+            }
             
             var fieldFitRmsSum = 0.0
             for (i in ptsToMeasureRef.indices) {
@@ -249,22 +305,27 @@ object V4OpticalAnalyzer {
                 registrationRms = registrationRms,
                 ransacInliers = inliersCount,
                 fieldFitRms = fieldFitRms,
-                refDotCount = matchedRef.size,
-                lensDotCount = matchedLens.size,
+                refDotCount = baseRefDotCount,
+                lensDotCount = baseLensDotCount,
                 meanDx = meanDx,
                 meanDy = meanDy,
                 referencePoints = ptsToMeasureRef,
                 observedPoints = transformedLens,
                 refWidth = w.toInt(),
                 refHeight = h.toInt(),
-                globalScaleAmbiguous = globalScaleAmbiguous
+                globalScaleAmbiguous = globalScaleAmbiguous,
+                candidateMatches = matchedRef.size,
+                acceptedMatches = ptsToMeasureRef.size,
+                rejectedMatches = matchedRef.size - ptsToMeasureRef.size,
+                matrixRank = rank,
+                conditionNumber = cond,
+                degeneracyStatus = degeneracyStatus
             )
         } catch (e: Exception) {
-            Log.e("V4OpticalAnalyzer", "AnalyzePoints failed", e)
-            return V4RunResult(success = false, errorMessage = "Exception: ${e.message}")
+            android.util.Log.e("V4OpticalAnalyzer", "AnalyzePoints failed", e)
+            return V4RunResult(success = false, errorMessage = "Exception: ${e.message}", degeneracyStatus = "EXCEPTION")
         }
     }
-
     
     suspend fun analyze(noLensFrames: List<Bitmap>, withLensFrames: List<Bitmap>): V4RunResult = withContext(Dispatchers.Default) {
         if (noLensFrames.isEmpty() || withLensFrames.isEmpty()) {
@@ -295,7 +356,7 @@ object V4OpticalAnalyzer {
                 var bestPt2: Point? = null
                 for (pt2 in baseLensPoints) {
                     val dist = hypot(pt1.x - pt2.x, pt1.y - pt2.y)
-                    if (dist < bestDist1 && dist < 100.0) {
+                    if (dist < bestDist1 && dist < 200.0) {
                         bestDist1 = dist
                         bestPt2 = pt2
                     }
@@ -306,7 +367,7 @@ object V4OpticalAnalyzer {
                     var bestPt1: Point? = null
                     for (pt1_check in baseRefPoints) {
                         val dist = hypot(pt1_check.x - bestPt2.x, pt1_check.y - bestPt2.y)
-                        if (dist < bestDist2 && dist < 100.0) {
+                        if (dist < bestDist2 && dist < 200.0) {
                             bestDist2 = dist
                             bestPt1 = pt1_check
                         }
@@ -318,14 +379,14 @@ object V4OpticalAnalyzer {
                 }
             }
             
-            if (matchedRef.size < 30) {
-                return@withContext V4RunResult(success = false, errorMessage = "Matched dots < 30 (${matchedRef.size})")
+            if (matchedRef.size < 10) {
+                return@withContext V4RunResult(success = false, errorMessage = "Matched dots < 10 (${matchedRef.size})")
             }
 
             val w = noLensFrames[0].width.toDouble()
             val h = noLensFrames[0].height.toDouble()
             
-            val res = analyzePoints(matchedRef, matchedLens, w, h)
+            val res = analyzePoints(matchedRef, matchedLens, w, h, baseRefPoints.size, baseLensPoints.size)
             if (!res.success) return@withContext res
             
             return@withContext res.copy(
@@ -378,7 +439,7 @@ object V4OpticalAnalyzer {
                 var bestPt2: Point? = null
                 for (pt2 in pts) {
                     val dist = hypot(pt1.x - pt2.x, pt1.y - pt2.y)
-                    if (dist < bestDist1 && dist < 100.0) {
+                    if (dist < bestDist1 && dist < 200.0) {
                         bestDist1 = dist
                         bestPt2 = pt2
                     }
@@ -389,7 +450,7 @@ object V4OpticalAnalyzer {
                     var bestPt1: Point? = null
                     for (pt1_check in basePoints) {
                         val dist = hypot(pt1_check.x - bestPt2.x, pt1_check.y - bestPt2.y)
-                        if (dist < bestDist2 && dist < 100.0) {
+                        if (dist < bestDist2 && dist < 200.0) {
                             bestDist2 = dist
                             bestPt1 = pt1_check
                         }
