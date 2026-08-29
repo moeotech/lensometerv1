@@ -60,7 +60,13 @@ data class V4RunResult(
     val stableTrackCount: Int = 0,
     val medianTrackLifetime: Double = 0.0,
     val rejectedReferencePoints: List<Point> = emptyList(),
-    val unmatchedLensPoints: List<Point> = emptyList()
+    val unmatchedLensPoints: List<Point> = emptyList(),
+    val localOutlierRejections: Int = 0,
+    val crossingVectorRejections: Int = 0,
+    val medianLocalResidual: Double = 0.0,
+    val madLocalResidual: Double = 0.0,
+    val opticalRejectedReferencePoints: List<Point> = emptyList(),
+    val opticalRejectedObservedPoints: List<Point> = emptyList()
 )
 
 data class V4Result(
@@ -105,7 +111,13 @@ private data class AggResult(
     val stableTrackCount: Int = 0,
     val medianTrackLifetime: Double = 0.0,
     val rejectedReferencePoints: List<Point> = emptyList(),
-    val unmatchedLensPoints: List<Point> = emptyList()
+    val unmatchedLensPoints: List<Point> = emptyList(),
+    val localOutlierRejections: Int = 0,
+    val crossingVectorRejections: Int = 0,
+    val medianLocalResidual: Double = 0.0,
+    val madLocalResidual: Double = 0.0,
+    val opticalRejectedReferencePoints: List<Point> = emptyList(),
+    val opticalRejectedObservedPoints: List<Point> = emptyList()
 )
 
 object V4OpticalAnalyzer {
@@ -730,8 +742,106 @@ object V4OpticalAnalyzer {
                 }
                 registrationRms = sqrt(rSum / max(1, inliersCount))
             }
+            // Robust Optical Vector Field Filter
+            val displacements = ptsToMeasureRef.zip(transformedLens).map { Point(it.second.x - it.first.x, it.second.y - it.first.y) }
+            val searchRadius = spacing * 1.8
+            val minNeighbors = 3
+            val localOutlierIndices = mutableSetOf<Int>()
+            val crossingIndices = mutableSetOf<Int>()
+
+            val localResiduals = mutableListOf<Double>()
+
+            for (i in ptsToMeasureRef.indices) {
+                val refPt = ptsToMeasureRef[i]
+                val disp = displacements[i]
+                val dstPt = transformedLens[i]
+                
+                val neighborIndices = mutableListOf<Int>()
+                for (j in ptsToMeasureRef.indices) {
+                    if (i == j) continue
+                    val distSq = (refPt.x - ptsToMeasureRef[j].x).pow(2) + (refPt.y - ptsToMeasureRef[j].y).pow(2)
+                    if (distSq < searchRadius * searchRadius) {
+                        neighborIndices.add(j)
+                    }
+                }
+                
+                var crossing = false
+                for (j in neighborIndices) {
+                    val nRefPt = ptsToMeasureRef[j]
+                    val nDstPt = transformedLens[j]
+                    
+                    val refDist = hypot(refPt.x - nRefPt.x, refPt.y - nRefPt.y)
+                    val dstDist = hypot(dstPt.x - nDstPt.x, dstPt.y - nDstPt.y)
+                    
+                    if (dstDist < refDist * 0.3) {
+                        crossing = true
+                        break
+                    }
+                    
+                    val refVecX = nRefPt.x - refPt.x
+                    val refVecY = nRefPt.y - refPt.y
+                    val dstVecX = nDstPt.x - dstPt.x
+                    val dstVecY = nDstPt.y - dstPt.y
+                    val dot = refVecX * dstVecX + refVecY * dstVecY
+                    if (dot < 0) { 
+                        crossing = true
+                        break
+                    }
+                }
+                
+                if (crossing) {
+                    crossingIndices.add(i)
+                    continue
+                }
+                
+                if (neighborIndices.size >= minNeighbors) {
+                    val nDispsX = neighborIndices.map { displacements[it].x }.sorted()
+                    val nDispsY = neighborIndices.map { displacements[it].y }.sorted()
+                    
+                    val medX = nDispsX[nDispsX.size / 2]
+                    val medY = nDispsY[nDispsY.size / 2]
+                    
+                    val nDistToMed = neighborIndices.map { 
+                        hypot(displacements[it].x - medX, displacements[it].y - medY)
+                    }.sorted()
+                    val mad = nDistToMed[nDistToMed.size / 2]
+                    
+                    val distToMed = hypot(disp.x - medX, disp.y - medY)
+                    localResiduals.add(distToMed)
+                    
+                    val thresh = max(mad * 4.0, spacing * 0.15)
+                    if (distToMed > thresh) {
+                        localOutlierIndices.add(i)
+                    }
+                }
+            }
+
+            val finalRefPts = mutableListOf<Point>()
+            val finalLensPts = mutableListOf<Point>()
+            val optRejectedRefPts = mutableListOf<Point>()
+            val optRejectedLensPts = mutableListOf<Point>()
+
+            for (i in ptsToMeasureRef.indices) {
+                if (crossingIndices.contains(i) || localOutlierIndices.contains(i)) {
+                    optRejectedRefPts.add(ptsToMeasureRef[i])
+                    optRejectedLensPts.add(transformedLens[i])
+                } else {
+                    finalRefPts.add(ptsToMeasureRef[i])
+                    finalLensPts.add(transformedLens[i])
+                }
+            }
+
+            ptsToMeasureRef.clear()
+            ptsToMeasureRef.addAll(finalRefPts)
             
+            val filteredTransformedLens = finalLensPts
             
+            val medianLocalRes = if (localResiduals.isNotEmpty()) localResiduals.sorted()[localResiduals.size / 2] else 0.0
+            val madLocalRes = if (localResiduals.isNotEmpty()) {
+                val m = medianLocalRes
+                localResiduals.map { abs(it - m) }.sorted()[localResiduals.size / 2]
+            } else 0.0
+
             // IRLS for robust optical field fit
             val numMeas = ptsToMeasureRef.size
             if (numMeas < 6) {
@@ -746,8 +856,8 @@ object V4OpticalAnalyzer {
                 A.put(i, 1, ptsToMeasureRef[i].y)
                 A.put(i, 2, 1.0)
                 
-                B.put(i, 0, transformedLens[i].x - ptsToMeasureRef[i].x)
-                B.put(i, 1, transformedLens[i].y - ptsToMeasureRef[i].y)
+                B.put(i, 0, filteredTransformedLens[i].x - ptsToMeasureRef[i].x)
+                B.put(i, 1, filteredTransformedLens[i].y - ptsToMeasureRef[i].y)
             }
             
             val J_matrix = Mat(3, 2, CvType.CV_64F)
@@ -921,8 +1031,8 @@ object V4OpticalAnalyzer {
             
             var sumDx = 0.0; var sumDy = 0.0
             for (i in 0 until numMeas) {
-                sumDx += (transformedLens[i].x - ptsToMeasureRef[i].x)
-                sumDy += (transformedLens[i].y - ptsToMeasureRef[i].y)
+                sumDx += (filteredTransformedLens[i].x - ptsToMeasureRef[i].x)
+                sumDy += (filteredTransformedLens[i].y - ptsToMeasureRef[i].y)
             }
             val meanDx = sumDx / numMeas
             val meanDy = sumDy / numMeas
@@ -948,7 +1058,13 @@ object V4OpticalAnalyzer {
                 meanDx = meanDx,
                 meanDy = meanDy,
                 referencePoints = ptsToMeasureRef,
-                observedPoints = transformedLens,
+                observedPoints = filteredTransformedLens,
+                localOutlierRejections = localOutlierIndices.size,
+                crossingVectorRejections = crossingIndices.size,
+                medianLocalResidual = medianLocalRes,
+                madLocalResidual = madLocalRes,
+                opticalRejectedReferencePoints = optRejectedRefPts,
+                opticalRejectedObservedPoints = optRejectedLensPts,
                 refWidth = w.toInt(),
                 refHeight = h.toInt(),
                 registrationModel = registrationModel,
@@ -1095,6 +1211,24 @@ object V4OpticalAnalyzer {
             canvas.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 3f, paintRejLens)
         }
         
+        val paintOptRejRef = Paint().apply { color = Color.GRAY; style = Paint.Style.FILL; isAntiAlias = true }
+        val paintOptRejLens = Paint().apply { color = Color.MAGENTA; style = Paint.Style.FILL; isAntiAlias = true }
+        val paintOptRejArrow = Paint().apply { color = Color.GRAY; strokeWidth = 1f; style = Paint.Style.STROKE; isAntiAlias = true }
+
+        val sizeOptRej = min(run.opticalRejectedReferencePoints.size, run.opticalRejectedObservedPoints.size)
+        for (i in 0 until sizeOptRej) {
+            val refPt = run.opticalRejectedReferencePoints[i]
+            val lensPt = run.opticalRejectedObservedPoints[i]
+            
+            canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintOptRejRef)
+            
+            val dx = (lensPt.x - refPt.x) * mag
+            val dy = (lensPt.y - refPt.y) * mag
+            
+            canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintOptRejLens)
+            canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintOptRejArrow)
+        }
+
         for (i in 0 until limit) {
             val refPt = run.referencePoints[i]
             val lensPt = run.observedPoints[i]
