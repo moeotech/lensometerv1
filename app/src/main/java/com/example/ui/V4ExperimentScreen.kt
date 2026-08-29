@@ -73,6 +73,7 @@ fun V4ExperimentScreen() {
     var currentStep by remember { mutableStateOf(V4Step.INIT) }
     var analysisErrorMessage by remember { mutableStateOf("") }
     var currentRunIndex by remember { mutableStateOf(0) }
+    var retryCountForCurrentRun by remember { mutableStateOf(0) }
     
     val runResults = remember { mutableStateListOf<V4RunResult?>(null, null, null) }
     var overallResult by remember { mutableStateOf<V4Result?>(null) }
@@ -189,10 +190,13 @@ fun V4ExperimentScreen() {
             }
         }
         
-        while (capturedCount < 30) {
+        while (capturedCount < 30 && isProcessing) {
             delay(50)
         }
         frameCaptureCallback = null
+        if (!isProcessing) {
+            throw kotlinx.coroutines.CancellationException("Capture cancelled")
+        }
         isProcessing = false
     }
     
@@ -222,10 +226,43 @@ fun V4ExperimentScreen() {
         ) {
             Text("V4 DIRECT LENS", color = Color.White, fontWeight = FontWeight.Bold)
             Text("Camera ID: $cameraIdStr", color = Color.Gray, fontSize = 12.sp)
+            
+            if (currentStep == V4Step.STEP_2_WITH_LENS || currentStep == V4Step.ANALYZING) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("RUN ${currentRunIndex + 1} OF 3", color = Color.Green, fontWeight = FontWeight.Bold)
+                Text("Attempt ${retryCountForCurrentRun + 1} of 3", color = Color.LightGray)
+            }
+            
             Spacer(modifier = Modifier.height(8.dp))
+            
+            if (isProcessing || currentStep == V4Step.ANALYZING) {
+                Button(
+                    onClick = {
+                        frameCaptureCallback = null
+                        isProcessing = false
+                        currentStep = V4Step.INIT
+                        currentRunIndex = 0
+                        retryCountForCurrentRun = 0
+                        withLensFrames.clear()
+                        noLensFrames.clear()
+                        runResults.clear(); runResults.add(null); runResults.add(null); runResults.add(null)
+                        overallResult = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                ) {
+                    Text("STOP TEST", color = Color.White)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             
             if (isProcessing) {
                 LinearProgressIndicator(progress = { captureProgress }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            
+            if (analysisErrorMessage.isNotEmpty()) {
+                Text(analysisErrorMessage, color = Color.Red, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
             }
             
@@ -267,7 +304,8 @@ fun V4ExperimentScreen() {
                         coroutineScope.launch {
                             val result = V4OpticalAnalyzer.analyze(noLensFrames, withLensFrames)
                             
-                            if (!result.success) {
+                            if (!result.success && retryCountForCurrentRun < 2) {
+                                retryCountForCurrentRun++
                                 analysisErrorMessage = "INSUFFICIENT OPTICAL FEATURES - HOLD STILL\n${result.errorMessage}"
                                 // Retry same run
                                 currentStep = V4Step.STEP_2_WITH_LENS
@@ -282,6 +320,8 @@ fun V4ExperimentScreen() {
                             } else {
                                 analysisErrorMessage = ""
                                 runResults[currentRunIndex] = result
+                                retryCountForCurrentRun = 0
+                                
                                 if (currentRunIndex < 2) {
                                     currentRunIndex++
                                     currentStep = V4Step.STEP_2_WITH_LENS
@@ -296,7 +336,28 @@ fun V4ExperimentScreen() {
                                     }
                                 } else {
                                     val validRuns = runResults.filterNotNull().filter { it.success }
-                                    overallResult = V4OpticalAnalyzer.calculateRepeatability(validRuns)
+                                    if (validRuns.size < 3) {
+                                        overallResult = V4Result(
+                                            success = true, // Force to true to show the FAIL UI properly
+                                            measurementQualityPass = false,
+                                            qualityMessage = "insufficient valid runs",
+                                            sphDisplay = "N/A", cylDisplay = "N/A", axisDisplay = "N/A",
+                                            lambda1 = 0.0, lambda2 = 0.0, isotropic = 0.0, anisotropic = 0.0,
+                                            lambda1Std = 0.0, lambda2Std = 0.0, isotropicStd = 0.0, anisotropicStd = 0.0,
+                                            trackedDots = 0, refDotCount = 0,
+                                            commonGridPointsAcrossRuns = 0,
+                                            correspondenceConsistency = 0.0,
+                                            centerStdPx = 0.0,
+                                            tensorStd = 0.0,
+                                            registrationRms = 0.0,
+                                            fieldFitRms = 0.0,
+                                            allRuns = runResults.filterNotNull(),
+                                            lastRunResult = runResults.lastOrNull(),
+                                            errorMessage = ""
+                                        )
+                                    } else {
+                                        overallResult = V4OpticalAnalyzer.calculateRepeatability(validRuns)
+                                    }
                                     currentStep = V4Step.COMPLETE
                                 }
                             }
@@ -307,7 +368,7 @@ fun V4ExperimentScreen() {
                     Text("MEASUREMENT COMPLETE", color = Color.Green, fontWeight = FontWeight.Bold)
                     Button(onClick = {
                         currentRunIndex = 0
-                        runResults.fill(null)
+                        runResults.clear(); runResults.add(null); runResults.add(null); runResults.add(null)
                         overallResult = null
                         currentStep = V4Step.INIT
                     }, modifier = Modifier.fillMaxWidth()) {
@@ -501,8 +562,8 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                     }
                 }
             } else {
-                Text("REPEATABILITY FAILED or QUALITY GATE FAILED", color = Color.Red, fontSize = 20.sp)
-                Text("Reason: ${result.errorMessage}", color = Color.White)
+                Text("MEASUREMENT QUALITY: FAIL", color = Color.Red, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Reason: ${result.errorMessage}", color = Color.Yellow)
             }
             
             Spacer(modifier = Modifier.height(32.dp))
