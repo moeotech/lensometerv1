@@ -830,32 +830,30 @@ object V4OpticalAnalyzer {
                      candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "NAN_INF", matchRejections = rejections)
             }
             
-            val t = j00 + j11
-            val d = j00 * j11 - j01 * j10
-            val disc = t * t - 4 * d
+            val s00 = j00
+            val s11 = j11
+            val s01 = 0.5 * (j01 + j10)
             
-            var l1 = 0.0; var l2 = 0.0
-            if (disc >= 0) {
-                l1 = (t + sqrt(disc)) / 2.0
-                l2 = (t - sqrt(disc)) / 2.0
-            } else {
-                l1 = t / 2.0
-                l2 = t / 2.0
-            }
+            val trace = s00 + s11
+            val delta = sqrt(((s00 - s11) / 2.0) * ((s00 - s11) / 2.0) + s01 * s01)
+            
+            var l1 = trace / 2.0 + delta
+            var l2 = trace / 2.0 - delta
             
             if (abs(l2) > abs(l1)) {
                 val temp = l1; l1 = l2; l2 = temp
             }
             
             val iso = (l1 + l2) / 2.0
-            val aniso = (l1 - l2) / 2.0
+            val aniso = abs(l1 - l2)
             
             var axisRad = 0.0
-            if (abs(j10 + j01) > 1e-6) {
-                axisRad = 0.5 * atan2(j10 + j01, j00 - j11)
+            if (abs(s01) > 1e-6 || abs(s00 - s11) > 1e-6) {
+                axisRad = 0.5 * atan2(2.0 * s01, s00 - s11)
             }
             var axisDeg = axisRad * 180.0 / PI
-            if (axisDeg < 0) axisDeg += 180.0
+            while (axisDeg < 0.0) axisDeg += 180.0
+            while (axisDeg >= 180.0) axisDeg -= 180.0
             
             var sumDx = 0.0; var sumDy = 0.0
             for (i in 0 until numMeas) {

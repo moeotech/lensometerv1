@@ -347,6 +347,7 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                 
                 if (result.globalScaleAmbiguous) {
                     Text("GLOBAL_SCALE_AMBIGUOUS", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text("SPHERE SIGNAL MAY BE SUPPRESSED BY REGISTRATION", color = Color.Red, fontSize = 12.sp)
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
