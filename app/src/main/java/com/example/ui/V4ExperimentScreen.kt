@@ -322,43 +322,42 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
             if (result.success) {
                 Text("SPH: ${result.sphDisplay}", color = Color.Cyan, fontSize = 24.sp)
                 Text("CYL: ${result.cylDisplay}", color = Color.Cyan, fontSize = 24.sp)
-                Text("AXIS: ${result.axisDisplay}", color = Color.Cyan, fontSize = 24.sp)
+                Text("AXIS SIGNAL: ${result.axisDisplay}°", color = Color.Cyan, fontSize = 24.sp)
+                
+                if (result.globalScaleAmbiguous) {
+                    Text("GLOBAL_SCALE_AMBIGUOUS", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
                 
                 Spacer(modifier = Modifier.height(16.dp))
+                Text("RAW OPTICAL FIELD", color = Color.Yellow, fontWeight = FontWeight.Bold)
+                Text("Lambda 1: ${String.format("%.6f", result.lambda1)}", color = Color.LightGray)
+                Text("Lambda 2: ${String.format("%.6f", result.lambda2)}", color = Color.LightGray)
+                Text("Isotropic: ${String.format("%.6f", result.isotropic)}", color = Color.LightGray)
+                Text("Anisotropic: ${String.format("%.6f", result.anisotropic)}", color = Color.LightGray)
+                Text("Axis: ${result.axisDisplay}°", color = Color.LightGray)
+                Text("Matched dots: ${result.trackedDots}", color = Color.LightGray)
+                Text("Stable dots: ${result.refDotCount}", color = Color.LightGray)
+                
+                val framesAcc = result.allRuns.sumOf { it.framesAccepted }
+                Text("Frames accepted: $framesAcc", color = Color.LightGray)
+                Text("Registration RMS: ${String.format("%.3f", result.registrationRms)}", color = Color.LightGray)
+                Text("Field-fit RMS: ${String.format("%.3f", result.fieldFitRms)}", color = Color.LightGray)
+
+                Spacer(modifier = Modifier.height(16.dp))
                 Text("MEAN / STD DEV (REPEATABILITY)", color = Color.Yellow, fontWeight = FontWeight.Bold)
-                Text("SPH StdDev: ${String.format("%.4f", result.sphStd)}", color = Color.LightGray)
-                Text("CYL StdDev: ${String.format("%.4f", result.cylStd)}", color = Color.LightGray)
-                Text("P1 StdDev: ${String.format("%.4f", result.p1Std)}", color = Color.LightGray)
-                Text("P2 StdDev: ${String.format("%.4f", result.p2Std)}", color = Color.LightGray)
+                Text("Lambda 1 StdDev: ${String.format("%.6f", result.lambda1Std)}", color = Color.LightGray)
+                Text("Lambda 2 StdDev: ${String.format("%.6f", result.lambda2Std)}", color = Color.LightGray)
+                Text("Isotropic StdDev: ${String.format("%.6f", result.isotropicStd)}", color = Color.LightGray)
+                Text("Anisotropic StdDev: ${String.format("%.6f", result.anisotropicStd)}", color = Color.LightGray)
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("INDIVIDUAL RUNS", color = Color.Yellow, fontWeight = FontWeight.Bold)
                 result.allRuns.forEachIndexed { index, run ->
                     Text("RUN ${index + 1}:", color = Color.White, fontWeight = FontWeight.Bold)
-                    Text("SPH: ${String.format("%.2f", run.sph)}  CYL: ${String.format("%.2f", run.cyl)}  AXIS: ${String.format("%.0f", run.axis)}", color = Color.LightGray)
-                    Text("P1: ${String.format("%.4f", run.p1)}  P2: ${String.format("%.4f", run.p2)}", color = Color.LightGray)
-                    Text("Dots: ${run.trackedDots}  RMS: ${String.format("%.2f", run.registrationRms)}", color = Color.LightGray)
+                    Text("L1: ${String.format("%.4f", run.lambda1)} L2: ${String.format("%.4f", run.lambda2)} Iso: ${String.format("%.4f", run.isotropic)}", color = Color.LightGray)
+                    Text("Dots: ${run.trackedDots} Reg RMS: ${String.format("%.2f", run.registrationRms)}", color = Color.LightGray)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("PRINCIPAL SIGNAL 1: ${String.format("%.4f", result.p1)}", color = Color.LightGray)
-                Text("PRINCIPAL SIGNAL 2: ${String.format("%.4f", result.p2)}", color = Color.LightGray)
-                Text("ANISOTROPY: ${String.format("%.4f", result.anisotropy)}", color = Color.LightGray)
-                Text("ISOTROPIC COMPONENT: ${String.format("%.4f", result.isotropic)}", color = Color.LightGray)
-                Text("TRACKED DOTS: ${result.trackedDots}", color = Color.LightGray)
-                Text("REGISTRATION RMS: ${String.format("%.2f", result.registrationRms)}", color = Color.LightGray)
-                Text("RANSAC INLIERS: ${result.ransacInliers}", color = Color.LightGray)
-                Text("FIELD FIT RMS: ${String.format("%.4f", result.fieldFitRms)}", color = Color.LightGray)
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("SCIENTIFIC DEBUG", color = Color.Yellow, fontWeight = FontWeight.Bold)
-                Text("Ref Dots: ${result.refDotCount}", color = Color.Gray)
-                Text("Lens Dots: ${result.lensDotCount}", color = Color.Gray)
-                Text("Mean dx: ${String.format("%.2f", result.meanDx)}", color = Color.Gray)
-                Text("Mean dy: ${String.format("%.2f", result.meanDy)}", color = Color.Gray)
-                Text("Lambda1: ${String.format("%.4f", result.lambda1)}", color = Color.Gray)
-                Text("Lambda2: ${String.format("%.4f", result.lambda2)}", color = Color.Gray)
                 
                 if (result.visualVectorMap != null) {
                     Spacer(modifier = Modifier.height(16.dp))
