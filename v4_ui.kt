@@ -142,9 +142,8 @@ fun V4ExperimentScreen() {
             isDisposed = true
             if (cameraProviderFuture.isDone) {
                 val provider = cameraProviderFuture.get()
-                                imageAnalysisRef?.clearAnalyzer()
-                if (previewRef != null) provider.unbind(previewRef)
-                if (imageAnalysisRef != null) provider.unbind(imageAnalysisRef)
+                imageAnalysisRef?.clearAnalyzer()
+                // provider.unbindAll() // Removed to prevent unbinding the next screen's camera
             }
             analysisExecutor.shutdown()
         }
@@ -379,19 +378,12 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                     Text("Dots: ${run.trackedDots} Reg RMS: ${String.format("%.2f", run.registrationRms)}", color = Color.LightGray)
                     Text("Debug metrics:", color = Color.Gray, fontSize = 12.sp)
                     Text("- Detected dots: Ref ${run.refDotCount} / Lens ${run.lensDotCount}", color = Color.Gray, fontSize = 12.sp)
-                    Text("- Matches: ${run.candidateMatches} cand, ${run.acceptedMatches} acc", color = Color.Gray, fontSize = 12.sp)
-                    if (run.matchRejections.isNotEmpty()) {
-                        Text("- Rejections: ${run.matchRejections.entries.joinToString { "${it.key}: ${it.value}" }}", color = Color.Gray, fontSize = 12.sp)
-                    }
-                    Text("- Spatial coverage: ${String.format("%.1f", run.spatialCoveragePct)}%, Quads: ${run.quadrantCoverage}", color = Color.Gray, fontSize = 12.sp)
-                    Text("- Temporal: ${run.temporalTrackCount} tracks, ${run.stableTrackCount} stable, ${String.format("%.1f", run.medianTrackLifetime * 100.0)}% life", color = Color.Gray, fontSize = 12.sp)
+                    Text("- Matches: ${run.candidateMatches} cand, ${run.acceptedMatches} acc, ${run.rejectedMatches} rej", color = Color.Gray, fontSize = 12.sp)
                     Text("- Matrix: rank ${run.matrixRank}, cond ${String.format("%.1f", run.conditionNumber)}, status ${run.degeneracyStatus}", color = Color.Gray, fontSize = 12.sp)
                     Text("- RMS: reg ${String.format("%.3f", run.registrationRms)}, fit ${String.format("%.3f", run.fieldFitRms)}", color = Color.Gray, fontSize = 12.sp)
                     Text("- Frames acc: ${run.framesAccepted}", color = Color.Gray, fontSize = 12.sp)
                     Spacer(modifier = Modifier.height(4.dp))
-                    if (!run.success) {
-                        Text("FAILURE: ${run.errorMessage}", color = Color.Red, fontSize = 12.sp)
-                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
                 
                 if (result.visualVectorMap != null) {

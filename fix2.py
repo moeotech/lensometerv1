@@ -1,15 +1,12 @@
-with open('app/src/main/java/com/example/ui/LensExperimentScreen.kt', 'r') as f:
-    lines = f.readlines()
+import re
 
-new_lines = []
-for line in lines:
-    if "analysisExecutor.shutdown()" in line:
-        new_lines.append(line)
-        new_lines.append("        }\n")
-        new_lines.append("    }\n")
-        continue
-    new_lines.append(line)
+with open('app/src/main/java/com/example/analysis/V4OpticalAnalyzer.kt', 'r') as f:
+    content = f.read()
 
-with open('app/src/main/java/com/example/ui/LensExperimentScreen.kt', 'w') as f:
-    f.writelines(new_lines)
-
+# Just extract up to the first instance of 'object V4OpticalAnalyzer'
+idx = content.find("suspend fun analyze(")
+if idx != -1:
+    idx2 = content.find("suspend fun analyze(", idx + 10)
+    if idx2 != -1:
+        print("Found second analyze at", idx2)
+        # we have duplicates!

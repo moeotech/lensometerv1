@@ -182,8 +182,9 @@ fun FocusExperimentScreen() {
             isDisposed = true
             if (cameraProviderFuture.isDone) {
                 val provider = cameraProviderFuture.get()
-                imageAnalysisRef?.clearAnalyzer()
-                // provider.unbindAll() // Removed to prevent unbinding the next screen's camera
+                                imageAnalysisRef?.clearAnalyzer()
+                if (previewRef != null) provider.unbind(previewRef)
+                if (imageAnalysisRef != null) provider.unbind(imageAnalysisRef)
             }
             analysisExecutor.shutdown()
         }

@@ -1,67 +1,16 @@
-import re
+with open('app/src/main/java/com/example/analysis/V4OpticalAnalyzer.kt', 'r') as f:
+    content = f.read()
 
-def fix_screen(filepath, has_camera2):
-    with open(filepath, 'r') as f:
-        content = f.read()
+# Let's search for "suspend fun analyze("
+parts = content.split("suspend fun analyze(noLensFrames: List<Bitmap>, withLensFrames: List<Bitmap>): V4RunResult = withContext(Dispatchers.Default) {")
 
-    # 1. Clean up old broken insertions
-    content = re.sub(r'var flashMode.*?AUTO"\)\s*\}\n\s*', '', content)
-    content = re.sub(r'LaunchedEffect\(flashMode, cameraControlRef\).*?\}\s*\}\s*', '', content, flags=re.DOTALL)
+if len(parts) > 2:
+    print(f"Found {len(parts)} parts!")
+    # the correct file should just be parts[0] + "suspend fun analyze(noLensFrames: List<Bitmap>, withLensFrames: List<Bitmap>): V4RunResult = withContext(Dispatchers.Default) {" + parts[-1]
     
-    # Also clean up the inserted UI toggle if it's there
-    content = re.sub(r'Row\(\s*modifier = Modifier\s*\.align\(Alignment\.TopCenter\).*?Text\("OFF".*?\}\s*\}\s*\}\s*Canvas\(modifier = Modifier\.fillMaxSize\(\)\) \{', 'Canvas(modifier = Modifier.fillMaxSize()) {', content, flags=re.DOTALL)
-
-    # 2. Add state and effect right after `val lifecycleOwner = LocalLifecycleOwner.current`
-    state_and_effect = """
-    var flashMode by remember { mutableStateOf("AUTO") }
-    LaunchedEffect(flashMode, cameraControlRef) {
-        try {
-            when (flashMode) {
-                "ON" -> cameraControlRef?.enableTorch(true)
-                "OFF" -> cameraControlRef?.enableTorch(false)
-                "AUTO" -> {
-                    cameraControlRef?.enableTorch(false)"""
-    if has_camera2:
-        state_and_effect += """
-                    camera2ControlRef?.let { c2c ->
-                        val builder = CaptureRequestOptions.Builder()
-                        builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
-                        c2c.captureRequestOptions = builder.build()
-                    }"""
-    state_and_effect += """
-                }
-            }
-        } catch (e: Exception) {}
-    }
-"""
-    content = content.replace("val lifecycleOwner = LocalLifecycleOwner.current", "val lifecycleOwner = LocalLifecycleOwner.current\n" + state_and_effect)
-    content = content.replace("val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current", "val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current\n" + state_and_effect)
-
-    # 3. Add UI toggle
-    ui_toggle_replacement = """            Row(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp)
-                    .background(Color(0x88000000), RoundedCornerShape(8.dp)),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                TextButton(onClick = { flashMode = "AUTO" }) {
-                    Text("AUTO", color = if (flashMode == "AUTO") Color.Yellow else Color.White)
-                }
-                TextButton(onClick = { flashMode = "ON" }) {
-                    Text("ON", color = if (flashMode == "ON") Color.Yellow else Color.White)
-                }
-                TextButton(onClick = { flashMode = "OFF" }) {
-                    Text("OFF", color = if (flashMode == "OFF") Color.Yellow else Color.White)
-                }
-            }
-
-            Canvas(modifier = Modifier.fillMaxSize()) {"""
-            
-    content = content.replace("            Canvas(modifier = Modifier.fillMaxSize()) {", ui_toggle_replacement, 1)
-
-    with open(filepath, 'w') as f:
-        f.write(content)
-
-fix_screen('app/src/main/java/com/example/ui/ExperimentScreen.kt', has_camera2=False)
-fix_screen('app/src/main/java/com/example/ui/FocusExperimentScreen.kt', has_camera2=True)
+    # Wait, parts[-1] contains `calculateRepeatability` and `drawVectorMap`.
+    # Let's verify parts[-1] doesn't have duplicates.
+    sub_parts = parts[-1].split("fun analyzePoints(")
+    if len(sub_parts) > 2:
+        print(f"Found {len(sub_parts)} analyzePoints parts!")
+        # It's a mess.

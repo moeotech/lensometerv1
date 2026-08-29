@@ -1,4 +1,4 @@
-package com.example.analysis
+part1 = """package com.example.analysis
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -277,6 +277,7 @@ object V4OpticalAnalyzer {
         dists.sort()
         return dists[dists.size / 2]
     }
+
     suspend fun analyze(noLensFrames: List<Bitmap>, withLensFrames: List<Bitmap>): V4RunResult = withContext(Dispatchers.Default) {
         if (noLensFrames.isEmpty() || withLensFrames.isEmpty()) {
             return@withContext V4RunResult(success = false, errorMessage = "Missing frames")
@@ -390,6 +391,7 @@ object V4OpticalAnalyzer {
             return@withContext V4RunResult(success = false, errorMessage = "Exception: ${e.message}")
         }
     }
+
     fun analyzePoints(matchedRef: List<Point>, matchedLens: List<Point>, w: Double, h: Double, baseRefDotCount: Int = 0, baseLensDotCount: Int = 0, spacing: Double = 30.0, rejections: MutableMap<String, Int> = mutableMapOf()): V4RunResult {
         try {
             val cx = w / 2.0
@@ -696,6 +698,7 @@ object V4OpticalAnalyzer {
             return V4RunResult(success = false, errorMessage = "Exception: ${e.message}", degeneracyStatus = "EXCEPTION", matchRejections = rejections)
         }
     }
+
     suspend fun calculateRepeatability(results: List<V4RunResult>): V4Result = withContext(Dispatchers.Default) {
         if (results.size < 3) {
             return@withContext V4Result(success = false, errorMessage = "Need 3 runs")
@@ -806,3 +809,7 @@ object V4OpticalAnalyzer {
         return bitmap
     }
 }
+"""
+
+with open('app/src/main/java/com/example/analysis/V4OpticalAnalyzer.kt', 'w') as f:
+    f.write(part1 + part2 + part3 + part4)
