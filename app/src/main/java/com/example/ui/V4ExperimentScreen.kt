@@ -101,8 +101,7 @@ fun V4ExperimentScreen() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         
         cameraProviderFuture.addListener({
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                if (isDisposed) return@postDelayed
+            if (isDisposed) return@addListener
                 
                 val cameraProvider = cameraProviderFuture.get()
                 val preview = Preview.Builder().build()
@@ -135,7 +134,7 @@ fun V4ExperimentScreen() {
                     camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)
                     cameraIdStr = Camera2CameraInfo.from(camera.cameraInfo).cameraId
                 } catch (exc: Exception) {}
-            }, 1000)
+            
         }, ContextCompat.getMainExecutor(context))
         
         onDispose {
@@ -145,6 +144,7 @@ fun V4ExperimentScreen() {
                                 imageAnalysisRef?.clearAnalyzer()
                 if (previewRef != null) provider.unbind(previewRef)
                 if (imageAnalysisRef != null) provider.unbind(imageAnalysisRef)
+
             }
             analysisExecutor.shutdown()
         }

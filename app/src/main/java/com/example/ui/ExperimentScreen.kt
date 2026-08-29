@@ -135,8 +135,7 @@ fun ExperimentScreen() {
 
 
                 cameraProviderFuture.addListener({
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        if (isDisposed) return@postDelayed
+                    if (isDisposed) return@addListener
 
                         val cameraProvider = cameraProviderFuture.get()
                         val preview = Preview.Builder().build()
@@ -171,7 +170,7 @@ fun ExperimentScreen() {
                             flashAvailable = false
                         }
                 
-                    }, 1000)
+                    
                 }, ContextCompat.getMainExecutor(context))
         
         onDispose {
@@ -181,6 +180,7 @@ fun ExperimentScreen() {
                                 imageAnalysisRef?.clearAnalyzer()
                 if (previewRef != null) provider.unbind(previewRef)
                 if (imageAnalysisRef != null) provider.unbind(imageAnalysisRef)
+
             }
             analysisExecutor.shutdown()
         }

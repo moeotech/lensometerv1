@@ -136,8 +136,7 @@ fun LensExperimentScreen() {
 
 
                 cameraProviderFuture.addListener({
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        if (isDisposed) return@postDelayed
+                    if (isDisposed) return@addListener
 
                         val cameraProvider = cameraProviderFuture.get()
                         val preview = Preview.Builder().build()
@@ -246,7 +245,7 @@ fun LensExperimentScreen() {
                             camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)
                         } catch (exc: Exception) {}
                 
-                    }, 1000)
+                    
                 }, ContextCompat.getMainExecutor(context))
         
         onDispose {
@@ -256,6 +255,7 @@ fun LensExperimentScreen() {
                                 imageAnalysisRef?.clearAnalyzer()
                 if (previewRef != null) provider.unbind(previewRef)
                 if (imageAnalysisRef != null) provider.unbind(imageAnalysisRef)
+
             }
             analysisExecutor.shutdown()
         }

@@ -8,7 +8,8 @@ for filename in os.listdir(directory):
         with open(filepath, 'r') as f:
             content = f.read()
             
-        content = re.sub(r'provider\.unbindAll\(\)\n\s*$', 'if (previewRef != null) provider.unbind(previewRef)\n                if (imageAnalysisRef != null) provider.unbind(imageAnalysisRef)\n', content, flags=re.MULTILINE)
+        content = re.sub(r'if \(previewRef != null\) provider\.unbind\(previewRef\)', 'provider.unbindAll()', content)
+        content = re.sub(r'if \(imageAnalysisRef != null\) provider\.unbind\(imageAnalysisRef\)', '', content)
         
         with open(filepath, 'w') as f:
             f.write(content)
