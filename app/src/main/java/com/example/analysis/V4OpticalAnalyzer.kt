@@ -19,7 +19,8 @@ data class OpticalPair(
     val observed: Point,
     val displacement: Point,
     val originalIndex: Int,
-    var status: String = "RETAINED"
+    var status: String = "RETAINED",
+    var correctedDisplacement: Point = Point(0.0, 0.0)
 )
 
 data class V4RunResult(
@@ -81,7 +82,14 @@ data class V4RunResult(
     val dispMAD: Double = 0.0,
     val dispP90: Double = 0.0,
     val dispMax: Double = 0.0,
-    val pairs: List<OpticalPair> = emptyList()
+    val pairs: List<OpticalPair> = emptyList(),
+    val globalMotionX: Double = 0.0,
+    val globalMotionY: Double = 0.0,
+    val globalMotionMagnitude: Double = 0.0,
+    val correctedDispMedian: Double = 0.0,
+    val correctedDispMAD: Double = 0.0,
+    val correctedDispP90: Double = 0.0,
+    val correctedDispMax: Double = 0.0
 )
 
 data class V4Result(
@@ -137,7 +145,14 @@ private data class AggResult(
     val dispMAD: Double = 0.0,
     val dispP90: Double = 0.0,
     val dispMax: Double = 0.0,
-    val pairs: List<OpticalPair> = emptyList()
+    val pairs: List<OpticalPair> = emptyList(),
+    val globalMotionX: Double = 0.0,
+    val globalMotionY: Double = 0.0,
+    val globalMotionMagnitude: Double = 0.0,
+    val correctedDispMedian: Double = 0.0,
+    val correctedDispMAD: Double = 0.0,
+    val correctedDispP90: Double = 0.0,
+    val correctedDispMax: Double = 0.0
 )
 
 object V4OpticalAnalyzer {
@@ -879,6 +894,29 @@ object V4OpticalAnalyzer {
 
             val retainedPairs = opticalPairs.filter { it.status == "RETAINED" }
             
+            // Motion correction
+            val dxs = retainedPairs.map { it.displacement.x }.sorted()
+            val dys = retainedPairs.map { it.displacement.y }.sorted()
+            val globalMotionX = if (dxs.isNotEmpty()) dxs[dxs.size / 2] else 0.0
+            val globalMotionY = if (dys.isNotEmpty()) dys[dys.size / 2] else 0.0
+            val globalMotionMagnitude = kotlin.math.hypot(globalMotionX, globalMotionY)
+            
+            for (pair in retainedPairs) {
+                pair.correctedDisplacement = Point(pair.displacement.x - globalMotionX, pair.displacement.y - globalMotionY)
+            }
+            
+            val correctedMags = retainedPairs.map { kotlin.math.hypot(it.correctedDisplacement.x, it.correctedDisplacement.y) }.sorted()
+            var correctedDispMedian = 0.0
+            var correctedDispMAD = 0.0
+            var correctedDispP90 = 0.0
+            var correctedDispMax = 0.0
+            if (correctedMags.isNotEmpty()) {
+                correctedDispMedian = correctedMags[correctedMags.size / 2]
+                correctedDispMAD = correctedMags.map { kotlin.math.abs(it - correctedDispMedian) }.sorted()[correctedMags.size / 2]
+                correctedDispP90 = correctedMags[(correctedMags.size * 0.9).toInt().coerceAtMost(correctedMags.size - 1)]
+                correctedDispMax = correctedMags.last()
+            }
+            
             val numMeas = retainedPairs.size
             if (numMeas < 6) {
                  return V4RunResult(success = false, errorMessage = "Insufficient measurement points (<6)", candidateMatches = matchedRef.size, acceptedMatches = inliersCount, matchRejections = rejections)
@@ -892,8 +930,8 @@ object V4OpticalAnalyzer {
                 A.put(i, 1, retainedPairs[i].reference.y)
                 A.put(i, 2, 1.0)
                 
-                B.put(i, 0, retainedPairs[i].displacement.x)
-                B.put(i, 1, retainedPairs[i].displacement.y)
+                B.put(i, 0, retainedPairs[i].correctedDisplacement.x)
+                B.put(i, 1, retainedPairs[i].correctedDisplacement.y)
             }
             
             val J_matrix = Mat(3, 2, CvType.CV_64F)
@@ -977,8 +1015,8 @@ object V4OpticalAnalyzer {
                     val u = j00 * x + j01 * y + c0
                     val v = j10 * x + j11 * y + c1
                     
-                    val dx = retainedPairs[i].displacement.x
-                    val dy = retainedPairs[i].displacement.y
+                    val dx = retainedPairs[i].correctedDisplacement.x
+                    val dy = retainedPairs[i].correctedDisplacement.y
                     
                     fieldFitRmsSum += (u - dx) * (u - dx) + (v - dy) * (v - dy)
                 }
@@ -1072,8 +1110,8 @@ object V4OpticalAnalyzer {
             
             var sumDx = 0.0; var sumDy = 0.0
             for (i in 0 until numMeas) {
-                sumDx += retainedPairs[i].displacement.x
-                sumDy += retainedPairs[i].displacement.y
+                sumDx += retainedPairs[i].correctedDisplacement.x
+                sumDy += retainedPairs[i].correctedDisplacement.y
             }
             val meanDx = sumDx / numMeas
             val meanDy = sumDy / numMeas
@@ -1111,6 +1149,13 @@ object V4OpticalAnalyzer {
                 dispP90 = dispP90,
                 dispMax = dispMax,
                 pairs = opticalPairs,
+                globalMotionX = globalMotionX,
+                globalMotionY = globalMotionY,
+                globalMotionMagnitude = globalMotionMagnitude,
+                correctedDispMedian = correctedDispMedian,
+                correctedDispMAD = correctedDispMAD,
+                correctedDispP90 = correctedDispP90,
+                correctedDispMax = correctedDispMax,
                 refWidth = w.toInt(),
                 refHeight = h.toInt(),
                 registrationModel = registrationModel,
@@ -1210,9 +1255,7 @@ object V4OpticalAnalyzer {
         }
         
         val lastRun = results.last()
-        val visualVectorMap = if (lastRun.referencePoints.isNotEmpty()) { 
-             drawVectorMapInternal(lastRun, 1f)
-        } else null
+        val visualVectorMap = if (lastRun.referencePoints.isNotEmpty()) { drawVectorMapInternal(lastRun, 1f, true) } else null
         
         return@withContext V4Result(
             success = true,
@@ -1241,12 +1284,12 @@ object V4OpticalAnalyzer {
         )
     }
     
-    fun drawVectorMap(result: V4Result, mag: Float): Bitmap? {
+    fun drawVectorMap(result: V4Result, mag: Float, useCorrectedVectors: Boolean = true): Bitmap? {
         if (result.lastRunResult == null) return null
-        return drawVectorMapInternal(result.lastRunResult, mag)
+        return drawVectorMapInternal(result.lastRunResult, mag, useCorrectedVectors)
     }
     
-    private fun drawVectorMapInternal(run: V4RunResult, mag: Float): Bitmap {
+    private fun drawVectorMapInternal(run: V4RunResult, mag: Float, useCorrectedVectors: Boolean = true): Bitmap {
         if (run.refWidth <= 0 || run.refHeight <= 0) {
             return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         }
@@ -1283,8 +1326,8 @@ object V4OpticalAnalyzer {
         for (pair in run.pairs) {
             val refPt = pair.reference
             val lensPt = pair.observed
-            val dx = (lensPt.x - refPt.x) * mag
-            val dy = (lensPt.y - refPt.y) * mag
+            val dx = if (useCorrectedVectors) pair.correctedDisplacement.x * mag else pair.displacement.x * mag
+            val dy = if (useCorrectedVectors) pair.correctedDisplacement.y * mag else pair.displacement.y * mag
             
             if (pair.status == "RETAINED") {
                 canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintRef)

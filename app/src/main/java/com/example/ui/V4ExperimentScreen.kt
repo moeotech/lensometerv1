@@ -402,10 +402,19 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                     Text("Median local res: ${String.format("%.3f", run.medianLocalResidual)}", color = Color.LightGray, fontSize = 12.sp)
                     Text("MAD local res: ${String.format("%.3f", run.madLocalResidual)}", color = Color.LightGray, fontSize = 12.sp)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Disp Median: ${String.format("%.2f", run.dispMedian)}", color = Color.LightGray, fontSize = 12.sp)
-                    Text("Disp MAD: ${String.format("%.2f", run.dispMAD)}", color = Color.LightGray, fontSize = 12.sp)
-                    Text("Disp P90: ${String.format("%.2f", run.dispP90)}", color = Color.LightGray, fontSize = 12.sp)
-                    Text("Disp Max: ${String.format("%.2f", run.dispMax)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Raw Disp Median: ${String.format("%.2f", run.dispMedian)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Raw Disp MAD: ${String.format("%.2f", run.dispMAD)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Raw Disp P90: ${String.format("%.2f", run.dispP90)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Raw Disp Max: ${String.format("%.2f", run.dispMax)}", color = Color.LightGray, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Global Motion X: ${String.format("%.2f", run.globalMotionX)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Global Motion Y: ${String.format("%.2f", run.globalMotionY)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Global Motion Mag: ${String.format("%.2f", run.globalMotionMagnitude)}", color = Color.LightGray, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Corrected Disp Median: ${String.format("%.2f", run.correctedDispMedian)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Corrected Disp MAD: ${String.format("%.2f", run.correctedDispMAD)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Corrected Disp P90: ${String.format("%.2f", run.correctedDispP90)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Corrected Disp Max: ${String.format("%.2f", run.correctedDispMax)}", color = Color.LightGray, fontSize = 12.sp)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Quadrants: ${run.quadrantCoverage}", color = Color.LightGray, fontSize = 12.sp)
                     Text("Coverage: ${String.format("%.1f", run.spatialCoveragePct)}%", color = Color.LightGray, fontSize = 12.sp)
@@ -424,13 +433,18 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("VISUAL VECTOR MAP (DISPLAY ONLY)", color = Color.White)
                     var mag by remember { mutableStateOf(10f) }
+                    var useCorrectedVectors by remember { mutableStateOf(true) }
                     Row {
                         Button(onClick = { mag = 1f }) { Text("1x") }
                         Button(onClick = { mag = 5f }) { Text("5x") }
                         Button(onClick = { mag = 10f }) { Text("10x") }
                         Button(onClick = { mag = 20f }) { Text("20x") }
                     }
-                    val bmp = V4OpticalAnalyzer.drawVectorMap(result, mag)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Motion Corrected Vectors:", color = Color.White)
+                        Switch(checked = useCorrectedVectors, onCheckedChange = { useCorrectedVectors = it })
+                    }
+                    val bmp = V4OpticalAnalyzer.drawVectorMap(result, mag, useCorrectedVectors)
                     if (bmp != null) {
                         androidx.compose.foundation.Image(
                             bitmap = bmp.asImageBitmap(),
