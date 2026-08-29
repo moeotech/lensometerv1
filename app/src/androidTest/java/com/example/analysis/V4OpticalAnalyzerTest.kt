@@ -5,16 +5,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
+import androidx.test.ext.junit.runners.AndroidJUnit4
+
 import org.opencv.core.Point
 import kotlin.math.*
 
-@RunWith(RobolectricTestRunner::class)
-@Config(manifest=Config.NONE)
+@RunWith(AndroidJUnit4::class)
+
 class V4OpticalAnalyzerTest {
     init {
-        nu.pattern.OpenCV.loadShared()
+        org.opencv.android.OpenCVLoader.initLocal()
     }
     
     @Test

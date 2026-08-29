@@ -28,14 +28,17 @@ import com.example.ui.V4ExperimentScreen
 import com.example.ui.theme.MyApplicationTheme
 
 import org.opencv.android.OpenCVLoader
+import org.opencv.core.Core
 import android.util.Log
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    try {
-        System.loadLibrary("opencv_java4")
-        Log.d("OpenCV", "OpenCV loaded successfully via System.loadLibrary")
-    } catch (e: UnsatisfiedLinkError) {
-        Log.e("OpenCV", "Unable to load OpenCV: ${e.message}")
+    if (OpenCVLoader.initLocal()) {
+        Log.i("OpenCV", "OpenCV initialized: YES")
+        Log.i("OpenCV", "OpenCV version: ${Core.VERSION}")
+        val mat = org.opencv.core.Mat()
+        Log.i("OpenCV", "OpenCV Mat creation works: ${!mat.empty() || mat.empty()}")
+    } else {
+        Log.e("OpenCV", "OpenCV initialized: NO")
     }
 
     super.onCreate(savedInstanceState)
