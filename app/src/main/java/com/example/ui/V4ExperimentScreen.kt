@@ -345,10 +345,15 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                 Text("CYL: ${result.cylDisplay}", color = Color.Cyan, fontSize = 24.sp)
                 Text("AXIS SIGNAL: ${result.axisDisplay}°", color = Color.Cyan, fontSize = 24.sp)
                 
-                if (result.globalScaleAmbiguous) {
-                    Text("GLOBAL_SCALE_AMBIGUOUS", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text("SPHERE SIGNAL MAY BE SUPPRESSED BY REGISTRATION", color = Color.Red, fontSize = 12.sp)
-                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("REGISTRATION DIAGNOSTICS", color = Color.Yellow, fontWeight = FontWeight.Bold)
+                Text("Model: ${result.lastRunResult?.registrationModel ?: "NONE"}", color = Color.LightGray)
+                Text("Scale: ${String.format("%.6f", result.lastRunResult?.registrationScale ?: 1.0)}", color = Color.LightGray)
+                Text("Rot: ${String.format("%.2f", result.lastRunResult?.registrationRotationDeg ?: 0.0)}°", color = Color.LightGray)
+                Text("Tx: ${String.format("%.1f", result.lastRunResult?.registrationTx ?: 0.0)}", color = Color.LightGray)
+                Text("Ty: ${String.format("%.1f", result.lastRunResult?.registrationTy ?: 0.0)}", color = Color.LightGray)
+                Text("Inliers: ${result.lastRunResult?.registrationInliers ?: 0} / ${result.lastRunResult?.registrationFeatureCount ?: 0}", color = Color.LightGray)
+
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("RAW OPTICAL FIELD", color = Color.Yellow, fontWeight = FontWeight.Bold)
@@ -386,7 +391,8 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                     Text("Features: ${run.registrationFeatureCount}", color = Color.LightGray, fontSize = 12.sp)
                     Text("Inliers: ${run.registrationInliers}", color = Color.LightGray, fontSize = 12.sp)
                     Text("RMS: ${String.format("%.3f", run.registrationRms)}", color = Color.LightGray, fontSize = 12.sp)
-                    Text("Scale ambiguous: ${if (run.globalScaleAmbiguous) "YES" else "NO"}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Model: ${run.registrationModel}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Scale: ${String.format("%.4f", run.registrationScale)}", color = Color.LightGray, fontSize = 12.sp)
                     
                     Text("OPTICAL FIELD", color = Color.Yellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Text("Input points: ${run.opticalFieldInputCount}", color = Color.LightGray, fontSize = 12.sp)

@@ -40,7 +40,11 @@ data class V4RunResult(
     val observedPoints: List<Point> = emptyList(),
     val refWidth: Int = 0,
     val refHeight: Int = 0,
-    val globalScaleAmbiguous: Boolean = false,
+    val registrationModel: String = "",
+    val registrationRotationDeg: Double = 0.0,
+    val registrationTx: Double = 0.0,
+    val registrationTy: Double = 0.0,
+    val registrationScale: Double = 0.0,
     val candidateMatches: Int = 0,
     val acceptedMatches: Int = 0,
     val matchRejections: Map<String, Int> = emptyMap(),
@@ -84,7 +88,11 @@ data class V4Result(
     val meanDy: Double = 0.0,
     val visualVectorMap: Bitmap? = null,
     val lastRunResult: V4RunResult? = null,
-    val globalScaleAmbiguous: Boolean = false
+    val registrationModel: String = "",
+    val registrationRotationDeg: Double = 0.0,
+    val registrationTx: Double = 0.0,
+    val registrationTy: Double = 0.0,
+    val registrationScale: Double = 0.0
 )
 
 private data class AggResult(
@@ -133,6 +141,73 @@ object V4OpticalAnalyzer {
         thresh.release()
         hierarchy.release()
         return points
+    }
+
+
+    private fun estimateStrictRigid(srcPts: List<Point>, dstPts: List<Point>, ransacThresh: Double): Pair<Mat, Mat> {
+        val srcMat = MatOfPoint2f().apply { fromList(srcPts) }
+        val dstMat = MatOfPoint2f().apply { fromList(dstPts) }
+        val mask = Mat()
+        val partial = Calib3d.estimateAffinePartial2D(srcMat, dstMat, mask, Calib3d.RANSAC, ransacThresh)
+        if (partial.empty()) return Pair(Mat(), mask)
+
+        val maskArray = ByteArray(mask.rows() * mask.cols())
+        mask.get(0, 0, maskArray)
+
+        val inlierSrc = mutableListOf<Point>()
+        val inlierDst = mutableListOf<Point>()
+        for (i in srcPts.indices) {
+            if (maskArray[i].toInt() != 0) {
+                inlierSrc.add(srcPts[i])
+                inlierDst.add(dstPts[i])
+            }
+        }
+
+        if (inlierSrc.size < 2) return Pair(Mat(), mask)
+
+        var cxSrc = 0.0; var cySrc = 0.0
+        var cxDst = 0.0; var cyDst = 0.0
+        val N = inlierSrc.size
+        for (i in inlierSrc.indices) {
+            cxSrc += inlierSrc[i].x; cySrc += inlierSrc[i].y
+            cxDst += inlierDst[i].x; cyDst += inlierDst[i].y
+        }
+        cxSrc /= N; cySrc /= N; cxDst /= N; cyDst /= N
+
+        var h00 = 0.0; var h01 = 0.0; var h10 = 0.0; var h11 = 0.0
+        for (i in inlierSrc.indices) {
+            val sx = inlierSrc[i].x - cxSrc
+            val sy = inlierSrc[i].y - cySrc
+            val dx = inlierDst[i].x - cxDst
+            val dy = inlierDst[i].y - cyDst
+            h00 += sx * dx; h01 += sx * dy
+            h10 += sy * dx; h11 += sy * dy
+        }
+
+        val H = Mat(2, 2, CvType.CV_64F)
+        H.put(0, 0, h00, h01, h10, h11)
+        val w = Mat(); val u = Mat(); val vt = Mat()
+        Core.SVDecomp(H, w, u, vt)
+
+        val R = Mat(2, 2, CvType.CV_64F)
+        Core.gemm(vt.t(), u.t(), 1.0, Mat(), 0.0, R)
+
+        if (Core.determinant(R) < 0) {
+            val vtFixed = vt.clone()
+            vtFixed.put(1, 0, -vtFixed.get(1, 0)[0], -vtFixed.get(1, 1)[0])
+            Core.gemm(vtFixed.t(), u.t(), 1.0, Mat(), 0.0, R)
+        }
+
+        val r00 = R.get(0, 0)[0]; val r01 = R.get(0, 1)[0]
+        val r10 = R.get(1, 0)[0]; val r11 = R.get(1, 1)[0]
+
+        val tx = cxDst - (r00 * cxSrc + r01 * cySrc)
+        val ty = cyDst - (r10 * cxSrc + r11 * cySrc)
+
+        val rigidTransform = Mat(2, 3, CvType.CV_64F)
+        rigidTransform.put(0, 0, r00, r01, tx, r10, r11, ty)
+
+        return Pair(rigidTransform, mask)
     }
 
     private fun aggregateFrames(frames: List<Bitmap>): AggResult {
@@ -186,8 +261,7 @@ object V4OpticalAnalyzer {
             srcMat.fromList(matchedCurr)
             dstMat.fromList(matchedBase)
             
-            val mask = Mat()
-            val transform = Calib3d.estimateAffinePartial2D(srcMat, dstMat, mask, Calib3d.RANSAC, 3.0)
+            val (transform, mask) = estimateStrictRigid(matchedCurr, matchedBase, 3.0)
             
             if (transform.empty()) {
                 rejected++
@@ -585,49 +659,42 @@ object V4OpticalAnalyzer {
             var registrationRms = 0.0
             var inliersCount = 0
             
-            val useRigidFallback = anchorRef.size < 15
-            if (useRigidFallback) {
-                globalScaleAmbiguous = true
-            }
+            val useRigidFallback = anchorRef.size < 4
             
-            val srcMat = MatOfPoint2f()
-            val dstMat = MatOfPoint2f()
-            
+            val regSrc: List<Point>
+            val regDst: List<Point>
             if (useRigidFallback) {
-                srcMat.fromList(matchedLens)
-                dstMat.fromList(matchedRef)
+                regSrc = matchedLens
+                regDst = matchedRef
             } else {
-                srcMat.fromList(anchorLens)
-                dstMat.fromList(anchorRef)
+                regSrc = anchorLens
+                regDst = anchorRef
             }
-            
-            val mask = Mat()
-            val transformMat: Mat
             
             val ransacThresh = if (useRigidFallback) max(15.0, spacing * 0.8) else max(5.0, spacing * 0.4)
             
-            if (useRigidFallback) {
-                if (matchedRef.size < 3) {
-                     return V4RunResult(success = false, errorMessage = "Insufficient matched points (<3)", candidateMatches = matchedRef.size, matchRejections = rejections)
-                }
-                transformMat = Calib3d.estimateAffinePartial2D(srcMat, dstMat, mask, Calib3d.RANSAC, ransacThresh)
-            } else {
-                if (anchorRef.size < 4) {
-                     return V4RunResult(success = false, errorMessage = "Insufficient anchors (<4)", candidateMatches = matchedRef.size, matchRejections = rejections)
-                }
-                transformMat = Calib3d.findHomography(srcMat, dstMat, Calib3d.RANSAC, ransacThresh, mask)
+            if (regSrc.size < 4) {
+                return V4RunResult(success = false, errorMessage = "REGISTRATION UNSTABLE (Not enough points)", candidateMatches = matchedRef.size, matchRejections = rejections)
             }
+            
+            val (transformMat, mask) = estimateStrictRigid(regSrc, regDst, ransacThresh)
             
             if (transformMat.empty()) {
                 rejections["registration_inconsistency"] = rejections.getOrDefault("registration_inconsistency", 0) + matchedRef.size
                 return V4RunResult(success = false, errorMessage = "Registration failed", candidateMatches = matchedRef.size, matchRejections = rejections)
             }
             
+            val r00 = transformMat.get(0, 0)[0]
+            val r10 = transformMat.get(1, 0)[0]
+            val registrationRotationDeg = atan2(r10, r00) * 180.0 / Math.PI
+            val registrationTx = transformMat.get(0, 2)[0]
+            val registrationTy = transformMat.get(1, 2)[0]
+            val registrationModel = if (useRigidFallback) "RIGID_FALLBACK" else "RIGID_ANCHOR"
+            
             val maskArray = ByteArray(mask.rows() * mask.cols())
             mask.get(0, 0, maskArray)
             inliersCount = maskArray.count { it.toInt() != 0 }
             
-            // Optical points to measure: Always all topology matches
             val ptsToMeasureRef = matchedRef.toMutableList()
             val ptsToMeasureLens = matchedLens.toMutableList()
             
@@ -635,18 +702,14 @@ object V4OpticalAnalyzer {
             srcMeasMat.fromList(ptsToMeasureLens)
             val dstMeasMat = MatOfPoint2f()
             
-            if (useRigidFallback) {
-                Core.transform(srcMeasMat, dstMeasMat, transformMat)
-            } else {
-                Core.perspectiveTransform(srcMeasMat, dstMeasMat, transformMat)
-            }
-            
+            Core.transform(srcMeasMat, dstMeasMat, transformMat)
             val transformedLens = dstMeasMat.toList()
             
             if (!useRigidFallback) {
                 var rSum = 0.0
+                val anchorLensMat = MatOfPoint2f().apply { fromList(anchorLens) }
                 val anchorLensTransformed = MatOfPoint2f()
-                Core.perspectiveTransform(srcMat, anchorLensTransformed, transformMat)
+                Core.transform(anchorLensMat, anchorLensTransformed, transformMat)
                 val transformedAnchors = anchorLensTransformed.toList()
                 for (i in anchorRef.indices) {
                     if (maskArray[i].toInt() != 0) {
@@ -667,6 +730,7 @@ object V4OpticalAnalyzer {
                 }
                 registrationRms = sqrt(rSum / max(1, inliersCount))
             }
+            
             
             // IRLS for robust optical field fit
             val numMeas = ptsToMeasureRef.size
@@ -887,7 +951,11 @@ object V4OpticalAnalyzer {
                 observedPoints = transformedLens,
                 refWidth = w.toInt(),
                 refHeight = h.toInt(),
-                globalScaleAmbiguous = globalScaleAmbiguous,
+                registrationModel = registrationModel,
+                registrationRotationDeg = registrationRotationDeg,
+                registrationTx = registrationTx,
+                registrationTy = registrationTy,
+                registrationScale = 1.0,
                 candidateMatches = matchedRef.size,
                 acceptedMatches = opticalFieldRetainedCount,
                 matchRejections = rejections,
@@ -911,22 +979,44 @@ object V4OpticalAnalyzer {
             return@withContext V4Result(success = false, errorMessage = "One or more runs failed: " + results.first { !it.success }.errorMessage)
         }
         
-        val l1_vals = results.map { it.lambda1 }.sorted()
-        if (l1_vals.last() - l1_vals.first() > 0.15) {
-            return@withContext V4Result(success = false, errorMessage = "REPEATABILITY FAILED (Lambda1 spread > 0.15)", allRuns = results, lastRunResult = results.last())
-        }
-        
         val lambda1Mean = results.map { it.lambda1 }.average()
         val lambda2Mean = results.map { it.lambda2 }.average()
         val isotropicMean = results.map { it.isotropic }.average()
         val anisotropicMean = results.map { it.anisotropic }.average()
-        
+
         val lambda1Std = sqrt(results.map { (it.lambda1 - lambda1Mean) * (it.lambda1 - lambda1Mean) }.average())
         val lambda2Std = sqrt(results.map { (it.lambda2 - lambda2Mean) * (it.lambda2 - lambda2Mean) }.average())
         val isotropicStd = sqrt(results.map { (it.isotropic - isotropicMean) * (it.isotropic - isotropicMean) }.average())
         val anisotropicStd = sqrt(results.map { (it.anisotropic - anisotropicMean) * (it.anisotropic - anisotropicMean) }.average())
+
+        val cvThreshold = 0.30
+        val minSignal = 0.05
         
+        fun checkCv(mean: Double, std: Double, name: String): String? {
+            if (Math.abs(mean) > minSignal) {
+                val cv = std / Math.abs(mean)
+                if (cv > cvThreshold) return "$name CV=${String.format("%.2f", cv)}"
+            }
+            return null
+        }
+        
+        val fails = listOfNotNull(
+            checkCv(lambda1Mean, lambda1Std, "L1"),
+            checkCv(lambda2Mean, lambda2Std, "L2"),
+            checkCv(isotropicMean, isotropicStd, "ISO"),
+            checkCv(anisotropicMean, anisotropicStd, "ANISO")
+        )
+        
+        val l1_vals = results.map { it.lambda1 }.sorted()
+        val spreadFails = l1_vals.last() - l1_vals.first() > 0.15
+        
+        if (fails.isNotEmpty() || spreadFails) {
+            val reason = if (fails.isNotEmpty()) fails.joinToString(", ") else "Lambda1 spread > 0.15"
+            return@withContext V4Result(success = false, errorMessage = "OPTICAL REPEATABILITY: FAILED ($reason)", allRuns = results, lastRunResult = results.last())
+        }
+
         var axisDisplay = "UNRELIABLE"
+
         var axisMean = 0.0
         if (anisotropicMean > 0.02) {
             var sinSum = 0.0
@@ -970,8 +1060,7 @@ object V4OpticalAnalyzer {
             meanDx = lastRun.meanDx,
             meanDy = lastRun.meanDy,
             visualVectorMap = visualVectorMap,
-            lastRunResult = lastRun,
-            globalScaleAmbiguous = results.any { it.globalScaleAmbiguous }
+            lastRunResult = lastRun
         )
     }
     
