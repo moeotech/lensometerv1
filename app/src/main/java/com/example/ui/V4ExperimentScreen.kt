@@ -369,6 +369,10 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                 Text("Anisotropic: ${String.format("%.6f", result.anisotropic)}", color = Color.LightGray)
                 Text("Axis: ${result.axisDisplay}°", color = Color.LightGray)
                 Text("Matched dots: ${result.trackedDots}", color = Color.LightGray)
+                Text("Common Grid Points: ${result.commonGridPointsAcrossRuns}", color = Color.LightGray)
+                Text("Correspondence Consistency: ${String.format("%.1f", result.correspondenceConsistency * 100.0)}%", color = Color.LightGray)
+                Text("Center StdPx: ${String.format("%.2f", result.centerStdPx)}", color = Color.LightGray)
+                Text("Tensor Std: ${String.format("%.6f", result.tensorStd)}", color = Color.LightGray)
                 Text("Stable dots: ${result.refDotCount}", color = Color.LightGray)
                 
                 val framesAcc = result.allRuns.sumOf { it.framesAccepted }
@@ -416,6 +420,19 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
                     Text("Model: ${run.registrationModel}", color = Color.LightGray, fontSize = 12.sp)
                     Text("Scale: ${String.format("%.4f", run.registrationScale)}", color = Color.LightGray, fontSize = 12.sp)
                     
+                    Text("TOPOLOGY", color = Color.Yellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Input: ${run.matchRejections["topologyInputDots"] ?: 0}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Assigned: ${run.matchRejections["topologyAssignedDots"] ?: 0}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Unassigned: ${run.matchRejections["topologyUnassignedDots"] ?: 0}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Collisions: ${run.matchRejections["topologyCollisions"] ?: 0}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Consistency errs: ${run.matchRejections["topologyConsistencyErrors"] ?: 0}", color = Color.LightGray, fontSize = 12.sp)
+
+                    Text("OPTICAL CENTER", color = Color.Yellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Valid: ${run.opticalCenterValid}", color = if (run.opticalCenterValid) Color.Green else Color.Red, fontSize = 12.sp)
+                    Text("Cond num: ${String.format("%.2f", run.opticalCenterConditionNumber)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Confidence: ${String.format("%.3f", run.opticalCenterConfidence)}", color = Color.LightGray, fontSize = 12.sp)
+                    Text("Center: (${String.format("%.1f", run.opticalCenterX)}, ${String.format("%.1f", run.opticalCenterY)})", color = Color.LightGray, fontSize = 12.sp)
+
                     Text("OPTICAL FIELD", color = Color.Yellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Text("Input points: ${run.opticalFieldInputCount}", color = Color.LightGray, fontSize = 12.sp)
                     Text("Retained points: ${run.opticalFieldRetainedCount}", color = Color.LightGray, fontSize = 12.sp)

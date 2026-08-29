@@ -83,6 +83,7 @@ data class V4RunResult(
     val dispMAD: Double = 0.0,
     val dispP90: Double = 0.0,
     val dispMax: Double = 0.0,
+    val matchedGridCoords: List<Pair<Int, Int>> = emptyList(),
     val pairs: List<OpticalPair> = emptyList(),
     val globalMotionX: Double = 0.0,
     val globalMotionY: Double = 0.0,
@@ -93,6 +94,9 @@ data class V4RunResult(
     val correctedDispMax: Double = 0.0,
     val opticalCenterX: Double = 0.0,
     val opticalCenterY: Double = 0.0,
+    val opticalCenterConditionNumber: Double = 0.0,
+    val opticalCenterValid: Boolean = false,
+    val opticalCenterConfidence: Double = 0.0,
     
     val stabilityL1Std: Double = 0.0,
     val stabilityL2Std: Double = 0.0,
@@ -126,6 +130,10 @@ data class V4Result(
     val lambda2Std: Double = 0.0,
     val isotropicStd: Double = 0.0,
     val anisotropicStd: Double = 0.0,
+    val commonGridPointsAcrossRuns: Int = 0,
+    val correspondenceConsistency: Double = 0.0,
+    val centerStdPx: Double = 0.0,
+    val tensorStd: Double = 0.0,
     val allRuns: List<V4RunResult> = emptyList(),
     val trackedDots: Int = 0,
     val registrationRms: Double = 0.0,
@@ -165,6 +173,7 @@ private data class AggResult(
     val dispMAD: Double = 0.0,
     val dispP90: Double = 0.0,
     val dispMax: Double = 0.0,
+    val matchedGridCoords: List<Pair<Int, Int>> = emptyList(),
     val pairs: List<OpticalPair> = emptyList(),
     val globalMotionX: Double = 0.0,
     val globalMotionY: Double = 0.0,
@@ -175,6 +184,9 @@ private data class AggResult(
     val correctedDispMax: Double = 0.0,
     val opticalCenterX: Double = 0.0,
     val opticalCenterY: Double = 0.0,
+    val opticalCenterConditionNumber: Double = 0.0,
+    val opticalCenterValid: Boolean = false,
+    val opticalCenterConfidence: Double = 0.0,
     val robustInliersCount: Int = 0,
     val weightedFitRms: Double = 0.0,
     val tensorA11: Double = 0.0,
@@ -221,70 +233,12 @@ object V4OpticalAnalyzer {
     }
 
 
-    private fun estimateStrictRigid(srcPts: List<Point>, dstPts: List<Point>, ransacThresh: Double): Pair<Mat, Mat> {
+    private fun estimateSimilarityTransform(srcPts: List<Point>, dstPts: List<Point>, ransacThresh: Double): Pair<Mat, Mat> {
         val srcMat = MatOfPoint2f().apply { fromList(srcPts) }
         val dstMat = MatOfPoint2f().apply { fromList(dstPts) }
         val mask = Mat()
         val partial = Calib3d.estimateAffinePartial2D(srcMat, dstMat, mask, Calib3d.RANSAC, ransacThresh)
-        if (partial.empty()) return Pair(Mat(), mask)
-
-        val maskArray = ByteArray(mask.rows() * mask.cols())
-        mask.get(0, 0, maskArray)
-
-        val inlierSrc = mutableListOf<Point>()
-        val inlierDst = mutableListOf<Point>()
-        for (i in srcPts.indices) {
-            if (maskArray[i].toInt() != 0) {
-                inlierSrc.add(srcPts[i])
-                inlierDst.add(dstPts[i])
-            }
-        }
-
-        if (inlierSrc.size < 2) return Pair(Mat(), mask)
-
-        var cxSrc = 0.0; var cySrc = 0.0
-        var cxDst = 0.0; var cyDst = 0.0
-        val N = inlierSrc.size
-        for (i in inlierSrc.indices) {
-            cxSrc += inlierSrc[i].x; cySrc += inlierSrc[i].y
-            cxDst += inlierDst[i].x; cyDst += inlierDst[i].y
-        }
-        cxSrc /= N; cySrc /= N; cxDst /= N; cyDst /= N
-
-        var h00 = 0.0; var h01 = 0.0; var h10 = 0.0; var h11 = 0.0
-        for (i in inlierSrc.indices) {
-            val sx = inlierSrc[i].x - cxSrc
-            val sy = inlierSrc[i].y - cySrc
-            val dx = inlierDst[i].x - cxDst
-            val dy = inlierDst[i].y - cyDst
-            h00 += sx * dx; h01 += sx * dy
-            h10 += sy * dx; h11 += sy * dy
-        }
-
-        val H = Mat(2, 2, CvType.CV_64F)
-        H.put(0, 0, h00, h01, h10, h11)
-        val w = Mat(); val u = Mat(); val vt = Mat()
-        Core.SVDecomp(H, w, u, vt)
-
-        val R = Mat(2, 2, CvType.CV_64F)
-        Core.gemm(vt.t(), u.t(), 1.0, Mat(), 0.0, R)
-
-        if (Core.determinant(R) < 0) {
-            val vtFixed = vt.clone()
-            vtFixed.put(1, 0, -vtFixed.get(1, 0)[0], -vtFixed.get(1, 1)[0])
-            Core.gemm(vtFixed.t(), u.t(), 1.0, Mat(), 0.0, R)
-        }
-
-        val r00 = R.get(0, 0)[0]; val r01 = R.get(0, 1)[0]
-        val r10 = R.get(1, 0)[0]; val r11 = R.get(1, 1)[0]
-
-        val tx = cxDst - (r00 * cxSrc + r01 * cySrc)
-        val ty = cyDst - (r10 * cxSrc + r11 * cySrc)
-
-        val rigidTransform = Mat(2, 3, CvType.CV_64F)
-        rigidTransform.put(0, 0, r00, r01, tx, r10, r11, ty)
-
-        return Pair(rigidTransform, mask)
+        return Pair(partial, mask)
     }
 
     private fun aggregateFrames(frames: List<Bitmap>): AggResult {
@@ -338,7 +292,7 @@ object V4OpticalAnalyzer {
             srcMat.fromList(matchedCurr)
             dstMat.fromList(matchedBase)
             
-            val (transform, mask) = estimateStrictRigid(matchedCurr, matchedBase, 3.0)
+            val (transform, mask) = estimateSimilarityTransform(matchedCurr, matchedBase, 3.0)
             
             if (transform.empty()) {
                 rejected++
@@ -441,8 +395,9 @@ object V4OpticalAnalyzer {
 
     private fun assignGridTopology(points: List<Point>, spacing: Double, rejections: MutableMap<String, Int> = mutableMapOf()): Map<Pair<Int, Int>, Point> {
         if (points.isEmpty()) return emptyMap()
-        
+
         val angles = mutableListOf<Double>()
+        val edges = mutableListOf<Triple<Int, Int, Double>>()
         for (i in points.indices) {
             for (j in i + 1 until points.size) {
                 val p1 = points[i]
@@ -450,71 +405,100 @@ object V4OpticalAnalyzer {
                 val dx = p2.x - p1.x
                 val dy = p2.y - p1.y
                 val dist = hypot(dx, dy)
-                if (dist > spacing * 0.5 && dist < spacing * 1.5) {
+                if (dist > spacing * 0.7 && dist < spacing * 1.3) {
                     var a = Math.atan2(dy, dx)
                     while (a < 0) a += Math.PI / 2.0
                     while (a >= Math.PI / 2.0) a -= Math.PI / 2.0
                     angles.add(a)
+                    edges.add(Triple(i, j, Math.atan2(dy, dx)))
                 }
             }
         }
-        
+
         val medianAngle = if (angles.isNotEmpty()) {
             angles.sort()
             angles[angles.size / 2]
         } else 0.0
-        
-        val cosA = Math.cos(-medianAngle)
-        val sinA = Math.sin(-medianAngle)
-        
+
         val cx = points.map { it.x }.average()
         val cy = points.map { it.y }.average()
-        
+        var bestSeedIdx = -1
+        var bestDist = Double.MAX_VALUE
+        for (i in points.indices) {
+            val d = hypot(points[i].x - cx, points[i].y - cy)
+            if (d < bestDist) {
+                bestDist = d
+                bestSeedIdx = i
+            }
+        }
+
         val grid = mutableMapOf<Pair<Int, Int>, Point>()
-        
         var assigned = 0
         var ambiguous = 0
         var collisions = 0
+
+        val queue = ArrayDeque<Pair<Int, Pair<Int, Int>>>()
+        val visited = mutableSetOf<Int>()
+        val coordsToIdx = mutableMapOf<Pair<Int, Int>, Int>()
         
-        for (p in points) {
-            val tx = p.x - cx
-            val ty = p.y - cy
-            val rx = tx * cosA - ty * sinA
-            val ry = tx * sinA + ty * cosA
+        if (bestSeedIdx != -1) {
+            queue.addLast(Pair(bestSeedIdx, Pair(0, 0)))
+            visited.add(bestSeedIdx)
             
-            val col = (rx / spacing).roundToInt()
-            val row = (ry / spacing).roundToInt()
-            
-            val coord = Pair(row, col)
-            if (grid.containsKey(coord)) {
-                collisions++
-                val existing = grid[coord]!!
+            while (queue.isNotEmpty()) {
+                val (currIdx, coord) = queue.removeFirst()
+                val (row, col) = coord
                 
-                val idealRx = col * spacing
-                val idealRy = row * spacing
-                
-                val extTx = existing.x - cx
-                val extTy = existing.y - cy
-                val erx = extTx * cosA - extTy * sinA
-                val ery = extTx * sinA + extTy * cosA
-                
-                val eDistSq = (erx - idealRx)*(erx - idealRx) + (ery - idealRy)*(ery - idealRy)
-                val pDistSq = (rx - idealRx)*(rx - idealRx) + (ry - idealRy)*(ry - idealRy)
-                
-                if (pDistSq < eDistSq) {
-                    grid[coord] = p
+                if (grid.containsKey(coord)) {
+                    collisions++
                     ambiguous++
-                } else {
-                    ambiguous++
+                    continue
                 }
-            } else {
-                grid[coord] = p
+                
+                grid[coord] = points[currIdx]
+                coordsToIdx[coord] = currIdx
                 assigned++
+                
+                // Find neighbors
+                for (edge in edges) {
+                    if (edge.first == currIdx || edge.second == currIdx) {
+                        val nIdx = if (edge.first == currIdx) edge.second else edge.first
+                        if (visited.contains(nIdx)) continue
+                        
+                        val nPt = points[nIdx]
+                        val cPt = points[currIdx]
+                        val dx = nPt.x - cPt.x
+                        val dy = nPt.y - cPt.y
+                        
+                        // Transform delta to aligned space
+                        val cosA = Math.cos(-medianAngle)
+                        val sinA = Math.sin(-medianAngle)
+                        val rx = dx * cosA - dy * sinA
+                        val ry = dx * sinA + dy * cosA
+                        
+                        var dr = 0
+                        var dc = 0
+                        if (abs(rx) > abs(ry)) {
+                            dc = if (rx > 0) 1 else -1
+                        } else {
+                            dr = if (ry > 0) 1 else -1
+                        }
+                        
+                        val nCoord = Pair(row + dr, col + dc)
+                        queue.addLast(Pair(nIdx, nCoord))
+                        visited.add(nIdx)
+                    }
+                }
             }
         }
-        rejections["gridAssigned"] = grid.size
-        rejections["gridAmbiguous"] = ambiguous
-        rejections["gridCollisions"] = collisions
+        
+        rejections["topologyInputDots"] = points.size
+        rejections["topologyAssignedDots"] = assigned
+        rejections["topologyUnassignedDots"] = points.size - assigned
+        rejections["topologyCollisions"] = collisions
+        rejections["topologyLargestComponent"] = assigned
+        rejections["topologyConsistencyErrors"] = ambiguous
+        
         return grid
     }
 
@@ -779,13 +763,14 @@ object V4OpticalAnalyzer {
 
             val candidateRef = mutableListOf<Point>()
             val candidateLens = mutableListOf<Point>()
+            val candidateCoords = mutableListOf<Pair<Int, Int>>()
 
-            
             val rejectedRefs = mutableListOf<Point>()
             for ((coord, ptRef) in gridMap) {
                 if (acceptedMatches.containsKey(coord)) {
                     candidateRef.add(ptRef)
                     candidateLens.add(acceptedMatches[coord]!!)
+                    candidateCoords.add(coord)
                 } else {
                     rejectedRefs.add(ptRef)
                     rejections["topology_rejection"] = rejections.getOrDefault("topology_rejection", 0) + 1
@@ -849,7 +834,7 @@ object V4OpticalAnalyzer {
                 }
                 
                 if (fRef.size >= 10) {
-                    val fRes = analyzePoints(fRef, fLens, w, h, baseRefPoints.size, fPts.size, spacing, mutableMapOf())
+                    val fRes = analyzePoints(fRef, fLens, w, h, baseRefPoints.size, fPts.size, spacing, mutableMapOf(), emptyList())
                     if (fRes.success) {
                         stabilityResults.add(fRes)
                     }
@@ -901,7 +886,7 @@ object V4OpticalAnalyzer {
                 stabilityMsg = "Not enough valid frames for stability check"
             }
             // --- END STABILITY GATE ---
-            val res = analyzePoints(candidateRef, candidateLens, w, h, baseRefPoints.size, baseLensPoints.size, spacing, rejections)
+            val res = analyzePoints(candidateRef, candidateLens, w, h, baseRefPoints.size, baseLensPoints.size, spacing, rejections, candidateCoords)
             
             return@withContext res.copy(
                 stabilityL1Std = l1Std,
@@ -925,7 +910,7 @@ object V4OpticalAnalyzer {
             return@withContext V4RunResult(success = false, errorMessage = "Exception: ${e.message}")
         }
     }
-    fun analyzePoints(matchedRef: List<Point>, matchedLens: List<Point>, w: Double, h: Double, baseRefDotCount: Int = 0, baseLensDotCount: Int = 0, spacing: Double = 30.0, rejections: MutableMap<String, Int> = mutableMapOf()): V4RunResult {
+    fun analyzePoints(matchedRef: List<Point>, matchedLens: List<Point>, w: Double, h: Double, baseRefDotCount: Int = 0, baseLensDotCount: Int = 0, spacing: Double = 30.0, rejections: MutableMap<String, Int> = mutableMapOf(), matchedGridCoords: List<Pair<Int, Int>> = emptyList()): V4RunResult {
         try {
             val cx = w / 2.0
             val cy = h / 2.0
@@ -963,7 +948,7 @@ object V4OpticalAnalyzer {
             if (useRigidFallback) {
                 regSrc = matchedLens
                 regDst = matchedRef
-                modelName = "RIGID_FALLBACK_UNTRUSTED"
+                modelName = "SIMILARITY_FALLBACK_UNTRUSTED"
                 fallbackTriggered = true
             } else {
                 regSrc = anchorLens
@@ -976,7 +961,7 @@ object V4OpticalAnalyzer {
                 return V4RunResult(success = false, errorMessage = "REGISTRATION UNSTABLE (Not enough points)", candidateMatches = matchedRef.size, matchRejections = rejections)
             }
             
-            val (transformMat, mask) = estimateStrictRigid(regSrc, regDst, ransacThresh)
+            val (transformMat, mask) = estimateSimilarityTransform(regSrc, regDst, ransacThresh)
             
             if (transformMat.empty()) {
                 rejections["registration_inconsistency"] = rejections.getOrDefault("registration_inconsistency", 0) + matchedRef.size
@@ -985,10 +970,11 @@ object V4OpticalAnalyzer {
             
             val r00 = transformMat.get(0, 0)[0]
             val r10 = transformMat.get(1, 0)[0]
+            val registrationScale = Math.hypot(r00, r10)
             val registrationRotationDeg = atan2(r10, r00) * 180.0 / Math.PI
             val registrationTx = transformMat.get(0, 2)[0]
             val registrationTy = transformMat.get(1, 2)[0]
-            val registrationModel = if (useRigidFallback) "RIGID_FALLBACK" else "RIGID_ANCHOR"
+            val registrationModel = if (useRigidFallback) "SIMILARITY_FALLBACK" else "SIMILARITY_ANCHOR"
             
             val maskArray = ByteArray(mask.rows() * mask.cols())
             mask.get(0, 0, maskArray)
@@ -1242,11 +1228,23 @@ object V4OpticalAnalyzer {
                 retainedPairs[i].robustWeight = weights[i]
             }
 
-            // Optical center calculation
+
+            // Optical center calculation via inverse Jacobian
             val det = j00 * j11 - j01 * j10
             var opticalCenterX = 0.0
             var opticalCenterY = 0.0
-            if (kotlin.math.abs(det) > 1e-9) {
+            
+            // Calculate condition number of J
+            val j_trace_JtJ = j00*j00 + j01*j01 + j10*j10 + j11*j11
+            val j_det_JtJ = det * det
+            val j_sqrt = Math.sqrt(Math.max(0.0, j_trace_JtJ * j_trace_JtJ - 4 * j_det_JtJ))
+            val j_eig1 = (j_trace_JtJ + j_sqrt) / 2.0
+            val j_eig2 = (j_trace_JtJ - j_sqrt) / 2.0
+            val opticalCenterConditionNumber = if (j_eig2 > 1e-15) Math.sqrt(j_eig1 / j_eig2) else Double.MAX_VALUE
+            val opticalCenterConfidence = if (opticalCenterConditionNumber > 0) 1.0 / opticalCenterConditionNumber else 0.0
+            val opticalCenterValid = opticalCenterConditionNumber < 20.0 && Math.abs(det) > 1e-8
+            
+            if (opticalCenterValid) {
                 val invJ00 = j11 / det
                 val invJ01 = -j01 / det
                 val invJ10 = -j10 / det
@@ -1254,6 +1252,9 @@ object V4OpticalAnalyzer {
                 
                 opticalCenterX = -(invJ00 * c0 + invJ01 * c1)
                 opticalCenterY = -(invJ10 * c0 + invJ11 * c1)
+            } else {
+                opticalCenterX = Double.NaN
+                opticalCenterY = Double.NaN
             }
 
             var opticalFieldRetainedCount = 0
@@ -1299,13 +1300,17 @@ object V4OpticalAnalyzer {
             val spreadY = if (maxY > minY) maxY - minY else 0.0
             val spatialCoveragePct = ((spreadX * spreadY) / (w * h)) * 100.0
             
-            if (opticalFieldRetainedCount < 6) {
-                 return V4RunResult(success = false, errorMessage = "Insufficient retained measurement points (<6)", candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matchRejections = rejections)
+            if (opticalFieldRetainedCount < 20) {
+                 return V4RunResult(success = false, errorMessage = "INSUFFICIENT SPATIAL CORRESPONDENCE (Points < 20)", candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matchRejections = rejections)
             }
             
-            if (quadCount < 2 || spreadX < w * 0.1 || spreadY < h * 0.1) {
+            if (quadCount < 3 || spatialCoveragePct < 40.0) {
                 rejections["roi_rejection"] = rejections.getOrDefault("roi_rejection", 0) + opticalFieldRetainedCount
-                return V4RunResult(success = false, errorMessage = "Poor spatial coverage (quads: $quadCount, spread: ${spreadX.toInt()}x${spreadY.toInt()})", candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matchRejections = rejections, spatialCoveragePct = spatialCoveragePct, quadrantCoverage = quadCount)
+                return V4RunResult(success = false, errorMessage = "INSUFFICIENT SPATIAL CORRESPONDENCE (Quads: $quadCount, Cov: ${String.format("%.1f", spatialCoveragePct)}%)", candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matchRejections = rejections, spatialCoveragePct = spatialCoveragePct, quadrantCoverage = quadCount)
+            }
+            
+            if (!opticalCenterValid) {
+                return V4RunResult(success = false, errorMessage = "INVALID CENTER (ill-conditioned fit)", candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matchRejections = rejections, spatialCoveragePct = spatialCoveragePct, quadrantCoverage = quadCount)
             }
             
             // Recompute SVDecomp for degeneracy check using just retained points
@@ -1424,8 +1429,12 @@ object V4OpticalAnalyzer {
                 correctedDispMAD = correctedDispMAD,
                 correctedDispP90 = correctedDispP90,
                 correctedDispMax = correctedDispMax,
+                matchedGridCoords = matchedGridCoords,
                 opticalCenterX = opticalCenterX,
                 opticalCenterY = opticalCenterY,
+                opticalCenterConditionNumber = opticalCenterConditionNumber,
+                opticalCenterValid = opticalCenterValid,
+                opticalCenterConfidence = opticalCenterConfidence,
                 robustInliersCount = opticalFieldRetainedCount,
                 weightedFitRms = fieldFitRms,
                 tensorA11 = j00,
@@ -1440,7 +1449,7 @@ object V4OpticalAnalyzer {
                 registrationRotationDeg = registrationRotationDeg,
                 registrationTx = registrationTx,
                 registrationTy = registrationTy,
-                registrationScale = 1.0,
+                registrationScale = registrationScale,
                 candidateMatches = matchedRef.size,
                 acceptedMatches = opticalFieldRetainedCount,
                 matchRejections = rejections,
@@ -1510,7 +1519,32 @@ object V4OpticalAnalyzer {
         if (anisoSpread > 0.03) spreadFails.add("ANISO spread=${String.format("%.3f", anisoSpread)}")
         
 
+
+        val coordSets = results.map { it.matchedGridCoords.toSet() }
+        val commonCoords = if (coordSets.isNotEmpty()) coordSets.reduce { acc, set -> acc.intersect(set) } else emptySet()
+        val commonGridPointsAcrossRuns = commonCoords.size
+        
+        val unionCoords = if (coordSets.isNotEmpty()) coordSets.reduce { acc, set -> acc.union(set) } else emptySet()
+        val correspondenceConsistency = if (unionCoords.isNotEmpty()) commonGridPointsAcrossRuns.toDouble() / unionCoords.size else 0.0
+        
+        val cxMean = results.map { it.opticalCenterX }.average()
+        val cyMean = results.map { it.opticalCenterY }.average()
+        val centerStdPx = Math.sqrt(results.map { 
+            Math.pow(it.opticalCenterX - cxMean, 2.0) + Math.pow(it.opticalCenterY - cyMean, 2.0) 
+        }.average())
+        
+        val tA11Mean = results.map { it.tensorA11 }.average()
+        val tA12Mean = results.map { it.tensorA12 }.average()
+        val tA21Mean = results.map { it.tensorA21 }.average()
+        val tA22Mean = results.map { it.tensorA22 }.average()
+        
+        val tensorStd = Math.sqrt(results.map { 
+            Math.pow(it.tensorA11 - tA11Mean, 2.0) + Math.pow(it.tensorA12 - tA12Mean, 2.0) +
+            Math.pow(it.tensorA21 - tA21Mean, 2.0) + Math.pow(it.tensorA22 - tA22Mean, 2.0)
+        }.average())
+
         val qualityPass = results.all { it.measurementQualityPass }
+
         val qualityMsgs = results.mapIndexed { idx, it -> "R${idx+1}: ${it.qualityMessage}" }.filter { !it.endsWith(": ") }.joinToString(" | ")
         
         var axisDisplay = "UNRELIABLE"

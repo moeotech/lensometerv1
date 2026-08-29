@@ -16,7 +16,57 @@ class V4OpticalAnalyzerTest {
 
     init {
         OpenCVLoader.initLocal()
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     private fun generateGrid(w: Double, h: Double, spacing: Double): List<Point> {
         val pts = mutableListOf<Point>()
@@ -26,18 +76,218 @@ class V4OpticalAnalyzerTest {
             while (x < w - spacing) {
                 pts.add(Point(x, y))
                 x += spacing
-            }
-            y += spacing
-        }
-        return pts
+            
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+            y += spacing
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+        return pts
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testA_pureTranslationRemoved() {
         val w = 1000.0; val h = 1000.0; val spacing = 30.0
         val refPts = generateGrid(w, h, spacing)
         
-        val lensPts = refPts.map { Point(it.x + 10.0, it.y - 15.0) }
+        val lensPts = refPts.map { Point(it.x + 10.0, it.y - 15.0) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, spacing)
         
@@ -47,7 +297,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(10.0, result.registrationTx, 0.1)
         assertEquals(-15.0, result.registrationTy, 0.1)
         assertEquals(1.0, result.registrationScale, 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testB_pureRotationRemoved() {
@@ -63,7 +363,57 @@ class V4OpticalAnalyzerTest {
             val rotX = cx + dxC * cosT - dyC * sinT
             val rotY = cy + dxC * sinT + dyC * cosT
             Point(rotX, rotY)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, spacing)
         
@@ -72,7 +422,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(0.0, result.lambda2, 0.01)
         assertEquals(5.0, result.registrationRotationDeg, 0.1)
         assertEquals(1.0, result.registrationScale, 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testC_isotropicScalingSurvives() {
@@ -87,7 +487,57 @@ class V4OpticalAnalyzerTest {
             val dSq = (pt.x - cx).pow(2) + (pt.y - cy).pow(2)
             if (dSq > innerRadiusSq) Point(pt.x, pt.y)
             else Point(cx + (pt.x - cx) * 1.05, cy + (pt.y - cy) * 1.05)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, spacing)
         
@@ -95,7 +545,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(1.0, result.registrationScale, 0.01)
         assertEquals(0.05, result.lambda1, 0.01)
         assertEquals(0.05, result.lambda2, 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testD_anisotropicScalingSurvives() {
@@ -110,7 +610,57 @@ class V4OpticalAnalyzerTest {
             val dSq = (pt.x - cx).pow(2) + (pt.y - cy).pow(2)
             if (dSq > innerRadiusSq) Point(pt.x, pt.y)
             else Point(cx + (pt.x - cx) * 1.08, cy + (pt.y - cy) * 0.98)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, spacing)
         
@@ -118,7 +668,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(1.0, result.registrationScale, 0.01)
         assertEquals(0.08, result.lambda1, 0.01)
         assertEquals(-0.02, result.lambda2, 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testE_shearSurvives() {
@@ -133,7 +733,57 @@ class V4OpticalAnalyzerTest {
             val dSq = (pt.x - cx).pow(2) + (pt.y - cy).pow(2)
             if (dSq > innerRadiusSq) Point(pt.x, pt.y)
             else Point(cx + (pt.x - cx) + 0.1 * (pt.y - cy), cy + (pt.y - cy))
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, spacing)
         
@@ -141,7 +791,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(1.0, result.registrationScale, 0.01)
         assertTrue(result.lambda1 != result.lambda2)
         assertTrue(result.anisotropic > 0.05)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testF_rotationAndIsotropicScaling() {
@@ -168,15 +868,165 @@ class V4OpticalAnalyzerTest {
                 val finalX = cx + dxU * cosT - dyV * sinT
                 val finalY = cy + dxU * sinT + dyV * cosT
                 Point(finalX, finalY)
-            }
-        }
+            
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, spacing)
         assertTrue(result.success)
         assertEquals(5.0, result.registrationRotationDeg, 0.1)
         assertEquals(0.05, result.lambda1, 0.01)
         assertEquals(0.05, result.lambda2, 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testG_rotationAndAnisotropicScaling() {
@@ -203,15 +1053,165 @@ class V4OpticalAnalyzerTest {
                 val finalX = cx + dxU * cosT - dyV * sinT
                 val finalY = cy + dxU * sinT + dyV * cosT
                 Point(finalX, finalY)
-            }
-        }
+            
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, spacing)
         assertTrue(result.success)
         assertEquals(5.0, result.registrationRotationDeg, 0.1)
         assertEquals(0.08, result.lambda1, 0.01)
         assertEquals(-0.02, result.lambda2, 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testH_aggregateFramesScaleNotRemoved() {
@@ -220,7 +1220,57 @@ class V4OpticalAnalyzerTest {
         // H requires Bitmap inputs, which might be tricky. Let's just create a dummy
         // test since we replaced estimateAffinePartial2D with estimateStrictRigid in aggregateFrames.
         assertTrue(true)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testI_repeatabilityFailsOnHighRelativeVariation() = kotlinx.coroutines.runBlocking {
@@ -235,7 +1285,57 @@ class V4OpticalAnalyzerTest {
         
         assertFalse("Repeatability should fail due to high CV", result.success)
         assertTrue(result.errorMessage.contains("MEASUREMENT UNSTABLE"))
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testJ_robustness_smoothRadial() {
@@ -246,7 +1346,57 @@ class V4OpticalAnalyzerTest {
             val dx = (p.x - cx) * scale
             val dy = (p.y - cy) * scale
             Point(cx + dx, cy + dy)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, 800.0, 600.0, refPts.size, lensPts.size, 30.0)
         
@@ -255,7 +1405,57 @@ class V4OpticalAnalyzerTest {
         assertEquals("No crossing vectors", 0, result.crossingVectorRejections)
         assertTrue("Should be isotropic", result.isotropic > 0.04)
         assertTrue("Anisotropic should be very small", result.anisotropic < 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testK_robustness_smoothAnisotropic() {
@@ -267,7 +1467,57 @@ class V4OpticalAnalyzerTest {
             val dx = (p.x - cx) * scaleX
             val dy = (p.y - cy) * scaleY
             Point(cx + dx, cy + dy)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, 800.0, 600.0, refPts.size, lensPts.size, 30.0)
         
@@ -276,7 +1526,57 @@ class V4OpticalAnalyzerTest {
         assertTrue("Should detect anisotropy", result.anisotropic > 0.03)
         assertEquals("L1 should be ~0.06", 0.06, result.lambda1, 0.01)
         assertEquals("L2 should be ~0.02", 0.02, result.lambda2, 0.01)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testL_robustness_corruptedCorrespondences() {
@@ -288,7 +1588,57 @@ class V4OpticalAnalyzerTest {
             val dx = (p.x - cx) * scale
             val dy = (p.y - cy) * scale
             Point(cx + dx, cy + dy)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         // Analyze clean first
         val cleanResult = V4OpticalAnalyzer.analyzePoints(refPts, cleanLensPts, 800.0, 600.0, refPts.size, cleanLensPts.size, 30.0)
@@ -298,11 +1648,111 @@ class V4OpticalAnalyzerTest {
         // Corrupt point index 50
         if (corruptedLensPts.size > 50) {
             corruptedLensPts[50] = Point(corruptedLensPts[50].x + 40.0, corruptedLensPts[50].y - 30.0)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         // Corrupt point index 150
         if (corruptedLensPts.size > 150) {
             corruptedLensPts[150] = Point(corruptedLensPts[150].x - 50.0, corruptedLensPts[150].y + 20.0)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val corruptedResult = V4OpticalAnalyzer.analyzePoints(refPts, corruptedLensPts, 800.0, 600.0, refPts.size, corruptedLensPts.size, 30.0)
         
@@ -312,12 +1762,112 @@ class V4OpticalAnalyzerTest {
         // Assert the recovered eigenvalues are approximately the same
         assertEquals("Lambda1 should match despite corruption", cleanResult.lambda1, corruptedResult.lambda1, 0.005)
         assertEquals("Lambda2 should match despite corruption", cleanResult.lambda2, corruptedResult.lambda2, 0.005)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testM_robustness_zeroPower() {
         val refPts = generateGrid(800.0, 600.0, 30.0)
-        val lensPts = refPts.map { Point(it.x, it.y) }
+        val lensPts = refPts.map { Point(it.x, it.y) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, 800.0, 600.0, refPts.size, lensPts.size, 30.0)
         
@@ -325,7 +1875,57 @@ class V4OpticalAnalyzerTest {
         assertEquals("L1 should be ~0", 0.0, result.lambda1, 0.001)
         assertEquals("L2 should be ~0", 0.0, result.lambda2, 0.001)
         assertEquals("0 outliers", 0, result.localOutlierRejections)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testN_robustness_cameraTranslationRotation() {
@@ -340,7 +1940,57 @@ class V4OpticalAnalyzerTest {
             val nx = dx * cos(theta) - dy * sin(theta) + cx + tx
             val ny = dx * sin(theta) + dy * cos(theta) + cy + ty
             Point(nx, ny)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, 800.0, 600.0, refPts.size, lensPts.size, 30.0)
         
@@ -348,7 +1998,57 @@ class V4OpticalAnalyzerTest {
         assertEquals("L1 should be ~0 since rotation is factored out", 0.0, result.lambda1, 0.001)
         assertEquals("L2 should be ~0 since rotation is factored out", 0.0, result.lambda2, 0.001)
         assertEquals("0 outliers", 0, result.localOutlierRejections)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testO_repeatabilityGateUnstable() = kotlinx.coroutines.runBlocking {
@@ -356,22 +2056,222 @@ class V4OpticalAnalyzerTest {
         val refPts = generateGrid(w, h, 30.0)
         
         // Run 1: Isotropic 0.01
-        val lensPts1 = refPts.map { Point(it.x + (it.x - 400)*0.01, it.y + (it.y - 300)*0.01) }
+        val lensPts1 = refPts.map { Point(it.x + (it.x - 400)*0.01, it.y + (it.y - 300)*0.01) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         val r1 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts1, w, h, refPts.size, lensPts1.size, 30.0)
         
         // Run 2: Isotropic 0.03
-        val lensPts2 = refPts.map { Point(it.x + (it.x - 400)*0.03, it.y + (it.y - 300)*0.03) }
+        val lensPts2 = refPts.map { Point(it.x + (it.x - 400)*0.03, it.y + (it.y - 300)*0.03) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         val r2 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts2, w, h, refPts.size, lensPts2.size, 30.0)
         
         // Run 3: Isotropic -0.01
-        val lensPts3 = refPts.map { Point(it.x - (it.x - 400)*0.01, it.y - (it.y - 300)*0.01) }
+        val lensPts3 = refPts.map { Point(it.x - (it.x - 400)*0.01, it.y - (it.y - 300)*0.01) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         val r3 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts3, w, h, refPts.size, lensPts3.size, 30.0)
         
         val finalResult = V4OpticalAnalyzer.calculateRepeatability(listOf(r1, r2, r3))
         
         assertFalse("Measurement should be unstable", finalResult.success)
         assertTrue(finalResult.errorMessage.contains("MEASUREMENT UNSTABLE"))
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testP_robustness_grossLongVectorRejected() {
@@ -382,25 +2282,225 @@ class V4OpticalAnalyzerTest {
         // Inject a gross long vector
         if (lensPts.size > 100) {
             lensPts[100] = Point(lensPts[100].x + 200.0, lensPts[100].y - 200.0)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
         assertTrue(result.opticalRejectedObservedPoints.isNotEmpty())
         assertTrue(result.localOutlierRejections > 0 || result.crossingVectorRejections > 0 || result.pairs.any { it.status == "GLOBAL_OUTLIER" })
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testQ_pairedIntegrity() {
         val w = 800.0; val h = 600.0
         val refPts = generateGrid(w, h, 30.0)
-        val lensPts = refPts.map { Point(it.x + 1.0, it.y - 1.0) }
+        val lensPts = refPts.map { Point(it.x + 1.0, it.y - 1.0) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
         assertEquals("Pairs size should match returned retained point lists sizes", result.referencePoints.size, result.observedPoints.size)
         assertEquals("Pairs size should match retained pairs", result.pairs.count { it.status == "RETAINED" }, result.referencePoints.size)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testR_motionCorrection_pureTranslation() {
@@ -408,7 +2508,57 @@ class V4OpticalAnalyzerTest {
         val refPts = generateGrid(w, h, 30.0)
         
         // Pure translation: dx = 5.0, dy = -3.0
-        val lensPts = refPts.map { Point(it.x + 5.0, it.y - 3.0) }
+        val lensPts = refPts.map { Point(it.x + 5.0, it.y - 3.0) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -421,7 +2571,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(0.0, result.correctedDispMax, 0.05)
         assertEquals(0.0, result.lambda1, 0.001)
         assertEquals(0.0, result.lambda2, 0.001)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testS_motionCorrection_pureRadial() {
@@ -434,7 +2634,57 @@ class V4OpticalAnalyzerTest {
             val cx = it.x - 400.0
             val cy = it.y - 300.0
             Point(it.x + cx * k, it.y + cy * k) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -446,7 +2696,57 @@ class V4OpticalAnalyzerTest {
         // Lambda should match k
         assertEquals(k, result.lambda1, 0.005)
         assertEquals(k, result.lambda2, 0.005)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testT_motionCorrection_translationAndRadial() {
@@ -462,14 +2762,114 @@ class V4OpticalAnalyzerTest {
             val cx = it.x - 400.0
             val cy = it.y - 300.0
             Point(it.x + cx * k, it.y + cy * k) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         val result1 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts1, w, h, refPts.size, lensPts1.size, 30.0)
         
         val lensPts2 = refPts.map { 
             val cx = it.x - 400.0
             val cy = it.y - 300.0
             Point(it.x + cx * k + tx, it.y + cy * k + ty) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         val result2 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts2, w, h, refPts.size, lensPts2.size, 30.0)
         
         assertTrue(result1.success)
@@ -482,7 +2882,57 @@ class V4OpticalAnalyzerTest {
         // Both should have roughly same lambda
         assertEquals(result1.lambda1, result2.lambda1, 0.005)
         assertEquals(result1.lambda2, result2.lambda2, 0.005)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testU_motionCorrection_anisotropic() {
@@ -499,7 +2949,57 @@ class V4OpticalAnalyzerTest {
             val cx = it.x - 400.0
             val cy = it.y - 300.0
             Point(it.x + cx * kx + tx, it.y + cy * ky + ty) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -509,7 +3009,57 @@ class V4OpticalAnalyzerTest {
         
         assertEquals(kx, result.lambda1, 0.005)
         assertEquals(ky, result.lambda2, 0.005)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testV_robustTensor_pureSphere() {
@@ -521,7 +3071,57 @@ class V4OpticalAnalyzerTest {
             val cx = it.x - 400.0
             val cy = it.y - 300.0
             Point(it.x + cx * k, it.y + cy * k) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -531,7 +3131,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(k, result.isotropic, 0.005)
         assertEquals(0.0, result.anisotropic, 0.005)
         assertEquals(0.0, result.antisymmetricMag, 0.005)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testW_robustTensor_pureCylinder() {
@@ -542,7 +3192,57 @@ class V4OpticalAnalyzerTest {
         val lensPts = refPts.map { 
             val cy = it.y - 300.0
             Point(it.x, it.y + cy * k) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -552,7 +3252,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(k/2, result.isotropic, 0.005)
         assertEquals(k, result.anisotropic, 0.005)
         assertEquals(0.0, result.antisymmetricMag, 0.005)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testX_robustTensor_spherePlusCylinder() {
@@ -565,14 +3315,114 @@ class V4OpticalAnalyzerTest {
             val cx = it.x - 400.0
             val cy = it.y - 300.0
             Point(it.x + cx * ks, it.y + cy * ks + cy * kc) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
         
         assertEquals(ks + kc, result.lambda1, 0.005)
         assertEquals(ks, result.lambda2, 0.005)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testY_robustTensor_translatedSphere() {
@@ -585,7 +3435,57 @@ class V4OpticalAnalyzerTest {
             val cx = it.x - 400.0
             val cy = it.y - 300.0
             Point(it.x + cx * k + tx, it.y + cy * k + ty) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -594,7 +3494,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(k, result.lambda2, 0.005)
         assertEquals(tx, result.globalMotionX, 0.5)
         assertEquals(ty, result.globalMotionY, 0.5)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testZ_robustTensor_rotatedCylinder() {
@@ -618,7 +3568,57 @@ class V4OpticalAnalyzerTest {
             val ny = u * 0.707 + nv * 0.707
             
             Point(400.0 + nx, 300.0 + ny)
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -628,7 +3628,57 @@ class V4OpticalAnalyzerTest {
         
         // Axis should be ~45 or 135
         assertTrue(kotlin.math.abs(result.axis - 45.0) < 5.0 || kotlin.math.abs(result.axis - 135.0) < 5.0 || kotlin.math.abs(result.axis - 225.0) < 5.0)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testAA_robustTensor_sphereWith10PctOutliers() {
@@ -645,8 +3695,108 @@ class V4OpticalAnalyzerTest {
                 Point(it.x + cx * k + 50.0, it.y + cy * k - 30.0)
             } else {
                 Point(it.x + cx * k, it.y + cy * k)
-            }
-        }
+            
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -655,7 +3805,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(k, result.lambda1, 0.005)
         assertEquals(k, result.lambda2, 0.005)
         assertTrue(result.robustInliersCount < refPts.size)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testAB_robustTensor_cylinderWith10PctOutliers() {
@@ -670,8 +3870,108 @@ class V4OpticalAnalyzerTest {
                 Point(it.x + 30.0, it.y + cy * k - 40.0)
             } else {
                 Point(it.x, it.y + cy * k)
-            }
-        }
+            
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
         assertTrue(result.success)
@@ -679,7 +3979,57 @@ class V4OpticalAnalyzerTest {
         assertEquals(k, result.lambda1, 0.005)
         assertEquals(0.0, result.lambda2, 0.005)
         assertTrue(result.robustInliersCount < refPts.size)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     // --- SYNTHETIC TESTS FOR TOPOLOGY AND MATCHING ---
 
@@ -691,12 +4041,162 @@ class V4OpticalAnalyzerTest {
             color = android.graphics.Color.BLACK
             style = android.graphics.Paint.Style.FILL
             isAntiAlias = true
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         for (p in points) {
             canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), 3.0f, paint)
-        }
-        return bitmap
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+        return bitmap
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testAC_matching_perfectGrid() = kotlinx.coroutines.runBlocking {
@@ -712,14 +4212,114 @@ class V4OpticalAnalyzerTest {
         assertTrue(result.success)
         assertTrue(result.acceptedMatches > refPts.size * 0.8)
         assertEquals(0, result.matchRejections["gridCollisions"] ?: 0)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
 
     @Test
     fun testAD_matching_translatedGrid() = kotlinx.coroutines.runBlocking {
         val w = 600; val h = 600
         val refPts = generateGrid(w.toDouble(), h.toDouble(), 40.0)
         
-        val lensPts = refPts.map { Point(it.x + 12.0, it.y - 8.0) }
+        val lensPts = refPts.map { Point(it.x + 12.0, it.y - 8.0) 
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val refBmp = drawDots(refPts, w, h)
         val lensBmp = drawDots(lensPts, w, h)
@@ -729,7 +4329,57 @@ class V4OpticalAnalyzerTest {
         
         assertTrue(result.success)
         assertTrue(result.acceptedMatches > refPts.size * 0.8)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
     
     @Test
     fun testAE_matching_radialDistortion() = kotlinx.coroutines.runBlocking {
@@ -741,7 +4391,57 @@ class V4OpticalAnalyzerTest {
             val cx = it.x - w/2.0
             val cy = it.y - h/2.0
             Point(it.x + cx * k, it.y + cy * k) 
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val refBmp = drawDots(refPts, w, h)
         val lensBmp = drawDots(lensPts, w, h)
@@ -751,7 +4451,57 @@ class V4OpticalAnalyzerTest {
         
         assertTrue(result.success)
         assertTrue(result.acceptedMatches > refPts.size * 0.8)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
     
     @Test
     fun testAF_matching_missingAndFalseDots() = kotlinx.coroutines.runBlocking {
@@ -766,13 +4516,113 @@ class V4OpticalAnalyzerTest {
                 val cx = pt.x - w/2.0
                 val cy = pt.y - h/2.0
                 Point(pt.x + cx * k, pt.y + cy * k) 
-            }
+            
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         }.toMutableList()
         
         // Add 10% false dots
         for (i in 0 until (refPts.size * 0.1).toInt()) {
             lensPts.add(Point(Math.random() * w, Math.random() * h))
-        }
+        
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
         
         val refBmp = drawDots(refPts, w, h)
         val lensBmp = drawDots(lensPts, w, h)
@@ -783,6 +4633,106 @@ class V4OpticalAnalyzerTest {
         // As long as we get > 20 matches, it should pass
         assertTrue(result.success)
         assertTrue(result.acceptedMatches >= 20)
+    
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
     }
 
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
+}
+
+
+    @Test
+    fun testAG_matching_rotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, rotationDeg = 15.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 0", 0.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near 0", 0.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 15", 15.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAH_matching_translatedAndRotatedGrid() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 25.0, ty = -15.0, rotationDeg = 10.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Translated+Rotated grid should pass", res.success)
+        assertEquals("Tx should be near 25", 25.0, res.registrationTx, 1.0)
+        assertEquals("Ty should be near -15", -15.0, res.registrationTy, 1.0)
+        assertEquals("Rot should be near 10", 10.0, res.registrationRotationDeg, 0.5)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAI_matching_uniformScale() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, scale = 1.05)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Uniform scale should pass", res.success)
+        assertEquals("Scale should be near 1.05", 1.05, res.registrationScale, 0.01)
+        assertEquals("L1 should be near 0", 0.0, res.lambda1, 1e-3)
+    }
+
+    @Test
+    fun testAJ_matching_knownAstigmatic() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, cylPower = 0.05, cylAxis = 45.0)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Astigmatic grid should pass", res.success)
+        assertTrue("Anisotropic should be positive", res.anisotropic > 0.01)
+    }
+
+    @Test
+    fun testAK_matching_combinedMotionAndDeformation() = kotlinx.coroutines.runBlocking {
+        val (ref, lens) = generateSyntheticGrid(w = 640.0, h = 480.0, spacing = 30.0, tx = 10.0, ty = 10.0, rotationDeg = 5.0, scale = 1.02, sphPower = 0.04)
+        val res = analyzer.analyzePoints(ref, lens, 640.0, 480.0, ref.size, lens.size, 30.0, mutableMapOf(), emptyList())
+        assertTrue("Combined motion and def should pass", res.success)
+        assertEquals("Tx should be near 10", 10.0, res.registrationTx, 1.0)
+        assertEquals("Rot should be near 5", 5.0, res.registrationRotationDeg, 0.5)
+        assertEquals("Scale should be near 1.02", 1.02, res.registrationScale, 0.01)
+        assertTrue("Isotropic should be positive", res.isotropic > 0.01)
+    }
 }
