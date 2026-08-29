@@ -13,7 +13,17 @@ import kotlin.math.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+
+data class OpticalPair(
+    val reference: Point,
+    val observed: Point,
+    val displacement: Point,
+    val originalIndex: Int,
+    var status: String = "RETAINED"
+)
+
 data class V4RunResult(
+
     val success: Boolean,
     val errorMessage: String = "",
     val axis: Double = 0.0,
@@ -66,7 +76,12 @@ data class V4RunResult(
     val medianLocalResidual: Double = 0.0,
     val madLocalResidual: Double = 0.0,
     val opticalRejectedReferencePoints: List<Point> = emptyList(),
-    val opticalRejectedObservedPoints: List<Point> = emptyList()
+    val opticalRejectedObservedPoints: List<Point> = emptyList(),
+    val dispMedian: Double = 0.0,
+    val dispMAD: Double = 0.0,
+    val dispP90: Double = 0.0,
+    val dispMax: Double = 0.0,
+    val pairs: List<OpticalPair> = emptyList()
 )
 
 data class V4Result(
@@ -117,7 +132,12 @@ private data class AggResult(
     val medianLocalResidual: Double = 0.0,
     val madLocalResidual: Double = 0.0,
     val opticalRejectedReferencePoints: List<Point> = emptyList(),
-    val opticalRejectedObservedPoints: List<Point> = emptyList()
+    val opticalRejectedObservedPoints: List<Point> = emptyList(),
+    val dispMedian: Double = 0.0,
+    val dispMAD: Double = 0.0,
+    val dispP90: Double = 0.0,
+    val dispMax: Double = 0.0,
+    val pairs: List<OpticalPair> = emptyList()
 )
 
 object V4OpticalAnalyzer {
@@ -708,7 +728,7 @@ object V4OpticalAnalyzer {
             inliersCount = maskArray.count { it.toInt() != 0 }
             
             val ptsToMeasureRef = matchedRef.toMutableList()
-            val ptsToMeasureLens = matchedLens.toMutableList()
+                        val ptsToMeasureLens = matchedLens.toMutableList()
             
             val srcMeasMat = MatOfPoint2f()
             srcMeasMat.fromList(ptsToMeasureLens)
@@ -742,99 +762,114 @@ object V4OpticalAnalyzer {
                 }
                 registrationRms = sqrt(rSum / max(1, inliersCount))
             }
-            // Robust Optical Vector Field Filter
-            val displacements = ptsToMeasureRef.zip(transformedLens).map { Point(it.second.x - it.first.x, it.second.y - it.first.y) }
+
+            val opticalPairs = mutableListOf<OpticalPair>()
+            for (i in matchedRef.indices) {
+                opticalPairs.add(OpticalPair(
+                    reference = matchedRef[i],
+                    observed = transformedLens[i],
+                    displacement = Point(transformedLens[i].x - matchedRef[i].x, transformedLens[i].y - matchedRef[i].y),
+                    originalIndex = i
+                ))
+            }
+
             val searchRadius = spacing * 1.8
             val minNeighbors = 3
-            val localOutlierIndices = mutableSetOf<Int>()
-            val crossingIndices = mutableSetOf<Int>()
-
+            
             val localResiduals = mutableListOf<Double>()
 
-            for (i in ptsToMeasureRef.indices) {
-                val refPt = ptsToMeasureRef[i]
-                val disp = displacements[i]
-                val dstPt = transformedLens[i]
+            // Task 4: Global Displacement Magnitude stats
+            val globalMagnitudes = opticalPairs.map { hypot(it.displacement.x, it.displacement.y) }.sorted()
+            var dispMedian = 0.0
+            var dispMAD = 0.0
+            var dispP90 = 0.0
+            var dispMax = 0.0
+            if (globalMagnitudes.isNotEmpty()) {
+                dispMedian = globalMagnitudes[globalMagnitudes.size / 2]
+                dispMAD = globalMagnitudes.map { abs(it - dispMedian) }.sorted()[globalMagnitudes.size / 2]
+                dispP90 = globalMagnitudes[(globalMagnitudes.size * 0.9).toInt().coerceAtMost(globalMagnitudes.size - 1)]
+                dispMax = globalMagnitudes.last()
+            }
+
+            for (i in opticalPairs.indices) {
+                val pair = opticalPairs[i]
                 
+                // TASK 4: Reject extreme global magnitude
+                val mag = hypot(pair.displacement.x, pair.displacement.y)
+                if (mag > max(dispMedian + 5.0 * dispMAD, spacing)) {
+                    pair.status = "GLOBAL_OUTLIER"
+                    continue
+                }
+
                 val neighborIndices = mutableListOf<Int>()
-                for (j in ptsToMeasureRef.indices) {
+                for (j in opticalPairs.indices) {
                     if (i == j) continue
-                    val distSq = (refPt.x - ptsToMeasureRef[j].x).pow(2) + (refPt.y - ptsToMeasureRef[j].y).pow(2)
+                    val nPair = opticalPairs[j]
+                    val distSq = (pair.reference.x - nPair.reference.x).pow(2) + (pair.reference.y - nPair.reference.y).pow(2)
                     if (distSq < searchRadius * searchRadius) {
                         neighborIndices.add(j)
                     }
                 }
                 
+                if (neighborIndices.size < minNeighbors) {
+                    // Not enough neighbors to verify, but we don't reject by default
+                    continue
+                }
+
+                val nDispsX = neighborIndices.map { opticalPairs[it].displacement.x }.sorted()
+                val nDispsY = neighborIndices.map { opticalPairs[it].displacement.y }.sorted()
+                
+                val medX = nDispsX[nDispsX.size / 2]
+                val medY = nDispsY[nDispsY.size / 2]
+                
+                val nDistToMed = neighborIndices.map { 
+                    hypot(opticalPairs[it].displacement.x - medX, opticalPairs[it].displacement.y - medY)
+                }.sorted()
+                val mad = nDistToMed[nDistToMed.size / 2]
+                
+                val distToMed = hypot(pair.displacement.x - medX, pair.displacement.y - medY)
+                localResiduals.add(distToMed)
+                
+                val thresh = max(mad * 4.0, spacing * 0.15)
+                if (distToMed > thresh) {
+                    pair.status = "LOCAL_OUTLIER"
+                    continue
+                }
+
                 var crossing = false
                 for (j in neighborIndices) {
-                    val nRefPt = ptsToMeasureRef[j]
-                    val nDstPt = transformedLens[j]
+                    val nPair = opticalPairs[j]
                     
-                    val refDist = hypot(refPt.x - nRefPt.x, refPt.y - nRefPt.y)
-                    val dstDist = hypot(dstPt.x - nDstPt.x, dstPt.y - nDstPt.y)
+                    val refDist = hypot(pair.reference.x - nPair.reference.x, pair.reference.y - nPair.reference.y)
+                    val obsDist = hypot(pair.observed.x - nPair.observed.x, pair.observed.y - nPair.observed.y)
                     
-                    if (dstDist < refDist * 0.3) {
+                    if (obsDist < refDist * 0.3) {
                         crossing = true
                         break
                     }
                     
-                    val refVecX = nRefPt.x - refPt.x
-                    val refVecY = nRefPt.y - refPt.y
-                    val dstVecX = nDstPt.x - dstPt.x
-                    val dstVecY = nDstPt.y - dstPt.y
+                    val refVecX = nPair.reference.x - pair.reference.x
+                    val refVecY = nPair.reference.y - pair.reference.y
+                    val dstVecX = nPair.observed.x - pair.observed.x
+                    val dstVecY = nPair.observed.y - pair.observed.y
+                    
                     val dot = refVecX * dstVecX + refVecY * dstVecY
                     if (dot < 0) { 
+                        crossing = true
+                        break
+                    }
+                    
+                    val ratio = obsDist / max(1e-5, refDist)
+                    if (ratio > 3.0) {
                         crossing = true
                         break
                     }
                 }
                 
                 if (crossing) {
-                    crossingIndices.add(i)
-                    continue
-                }
-                
-                if (neighborIndices.size >= minNeighbors) {
-                    val nDispsX = neighborIndices.map { displacements[it].x }.sorted()
-                    val nDispsY = neighborIndices.map { displacements[it].y }.sorted()
-                    
-                    val medX = nDispsX[nDispsX.size / 2]
-                    val medY = nDispsY[nDispsY.size / 2]
-                    
-                    val nDistToMed = neighborIndices.map { 
-                        hypot(displacements[it].x - medX, displacements[it].y - medY)
-                    }.sorted()
-                    val mad = nDistToMed[nDistToMed.size / 2]
-                    
-                    val distToMed = hypot(disp.x - medX, disp.y - medY)
-                    localResiduals.add(distToMed)
-                    
-                    val thresh = max(mad * 4.0, spacing * 0.15)
-                    if (distToMed > thresh) {
-                        localOutlierIndices.add(i)
-                    }
+                    pair.status = "CROSSING_REJECTED"
                 }
             }
-
-            val finalRefPts = mutableListOf<Point>()
-            val finalLensPts = mutableListOf<Point>()
-            val optRejectedRefPts = mutableListOf<Point>()
-            val optRejectedLensPts = mutableListOf<Point>()
-
-            for (i in ptsToMeasureRef.indices) {
-                if (crossingIndices.contains(i) || localOutlierIndices.contains(i)) {
-                    optRejectedRefPts.add(ptsToMeasureRef[i])
-                    optRejectedLensPts.add(transformedLens[i])
-                } else {
-                    finalRefPts.add(ptsToMeasureRef[i])
-                    finalLensPts.add(transformedLens[i])
-                }
-            }
-
-            ptsToMeasureRef.clear()
-            ptsToMeasureRef.addAll(finalRefPts)
-            
-            val filteredTransformedLens = finalLensPts
             
             val medianLocalRes = if (localResiduals.isNotEmpty()) localResiduals.sorted()[localResiduals.size / 2] else 0.0
             val madLocalRes = if (localResiduals.isNotEmpty()) {
@@ -842,8 +877,9 @@ object V4OpticalAnalyzer {
                 localResiduals.map { abs(it - m) }.sorted()[localResiduals.size / 2]
             } else 0.0
 
-            // IRLS for robust optical field fit
-            val numMeas = ptsToMeasureRef.size
+            val retainedPairs = opticalPairs.filter { it.status == "RETAINED" }
+            
+            val numMeas = retainedPairs.size
             if (numMeas < 6) {
                  return V4RunResult(success = false, errorMessage = "Insufficient measurement points (<6)", candidateMatches = matchedRef.size, acceptedMatches = inliersCount, matchRejections = rejections)
             }
@@ -852,12 +888,12 @@ object V4OpticalAnalyzer {
             val B = Mat(numMeas, 2, CvType.CV_64F)
             
             for (i in 0 until numMeas) {
-                A.put(i, 0, ptsToMeasureRef[i].x)
-                A.put(i, 1, ptsToMeasureRef[i].y)
+                A.put(i, 0, retainedPairs[i].reference.x)
+                A.put(i, 1, retainedPairs[i].reference.y)
                 A.put(i, 2, 1.0)
                 
-                B.put(i, 0, filteredTransformedLens[i].x - ptsToMeasureRef[i].x)
-                B.put(i, 1, filteredTransformedLens[i].y - ptsToMeasureRef[i].y)
+                B.put(i, 0, retainedPairs[i].displacement.x)
+                B.put(i, 1, retainedPairs[i].displacement.y)
             }
             
             val J_matrix = Mat(3, 2, CvType.CV_64F)
@@ -923,7 +959,7 @@ object V4OpticalAnalyzer {
             for (i in 0 until numMeas) {
                 if (weights[i] > 0.5) {
                     opticalFieldRetainedCount++
-                    val pt = ptsToMeasureRef[i]
+                    val pt = retainedPairs[i].reference
                     finalPtsToMeasureRef.add(pt)
                     
                     if (pt.x < cx && pt.y < cy) q1 = true
@@ -941,8 +977,8 @@ object V4OpticalAnalyzer {
                     val u = j00 * x + j01 * y + c0
                     val v = j10 * x + j11 * y + c1
                     
-                    val dx = transformedLens[i].x - x
-                    val dy = transformedLens[i].y - y
+                    val dx = retainedPairs[i].displacement.x
+                    val dy = retainedPairs[i].displacement.y
                     
                     fieldFitRmsSum += (u - dx) * (u - dx) + (v - dy) * (v - dy)
                 }
@@ -971,68 +1007,73 @@ object V4OpticalAnalyzer {
                 AW_final.put(i, 1, finalPtsToMeasureRef[i].y)
                 AW_final.put(i, 2, 1.0)
             }
-            val W = Mat(); val U = Mat(); val Vt = Mat()
-            Core.SVDecomp(AW_final, W, U, Vt)
-            
+            val wMat = Mat()
+            Core.SVDecomp(AW_final, wMat, Mat(), Mat())
             var rank = 0
-            var maxSingular = 0.0
-            var minSingular = Double.MAX_VALUE
-            for (i in 0 until W.rows()) {
-                val s = W.get(i, 0)[0]
-                if (s > maxSingular) maxSingular = s
-                if (s > 1e-6) {
-                    rank++
-                    if (s < minSingular) minSingular = s
+            var cond = 0.0
+            val sv = DoubleArray(wMat.rows())
+            if (!wMat.empty()) {
+                for (i in 0 until wMat.rows()) {
+                    val s = wMat.get(i, 0)[0]
+                    sv[i] = s
+                    if (s > 1e-5) rank++
                 }
+                cond = if (sv.last() > 1e-9) sv.first() / sv.last() else Double.MAX_VALUE
             }
-            val cond = if (minSingular > 0.0) maxSingular / minSingular else Double.MAX_VALUE
+            
             var degeneracyStatus = "OK"
-            if (rank < 3) {
-                degeneracyStatus = "RANK_DEFICIENT"
-            } else if (cond > 1e4 || cond.isNaN()) {
-                degeneracyStatus = "ILL_CONDITIONED"
+            if (rank < 3 || cond > 5000.0) {
+                degeneracyStatus = "DEGENERATE (rank=$rank, cond=${String.format("%.1f", cond)})"
             }
             
-            if (degeneracyStatus != "OK") {
-                 return V4RunResult(success = false, errorMessage = "Degenerate geometric configuration: $degeneracyStatus",
-                     candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = degeneracyStatus, matchRejections = rejections)
+            val J_mat = Mat(2, 2, CvType.CV_64F)
+            J_mat.put(0, 0, j00, j01)
+            J_mat.put(1, 0, j10, j11)
+            
+            val eVal = Mat()
+            val eVec = Mat()
+            Core.eigen(J_mat, eVal, eVec)
+            
+            var l1 = 0.0
+            var l2 = 0.0
+            if (eVal.rows() >= 2) {
+                l1 = eVal.get(0, 0)[0]
+                l2 = eVal.get(1, 0)[0]
             }
             
-            if (j00.isNaN() || j10.isNaN() || j01.isNaN() || j11.isNaN() ||
-                j00.isInfinite() || j10.isInfinite() || j01.isInfinite() || j11.isInfinite()) {
-                return V4RunResult(success = false, errorMessage = "NaN/Infinity in optical field solution",
-                     candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "NAN_INF", matchRejections = rejections)
-            }
-            
-            val s00 = j00
-            val s11 = j11
-            val s01 = 0.5 * (j01 + j10)
-            
-            val trace = s00 + s11
-            val delta = sqrt(((s00 - s11) / 2.0) * ((s00 - s11) / 2.0) + s01 * s01)
-            
-            var l1 = trace / 2.0 + delta
-            var l2 = trace / 2.0 - delta
-            
-            if (abs(l2) > abs(l1)) {
-                val temp = l1; l1 = l2; l2 = temp
+            if (Math.abs(l2) > Math.abs(l1)) {
+                val temp = l1
+                l1 = l2
+                l2 = temp
             }
             
             val iso = (l1 + l2) / 2.0
-            val aniso = abs(l1 - l2)
+            val aniso = l1 - l2
             
-            var axisRad = 0.0
-            if (abs(s01) > 1e-6 || abs(s00 - s11) > 1e-6) {
-                axisRad = 0.5 * atan2(2.0 * s01, s00 - s11)
+            val J_sym = Mat(2, 2, CvType.CV_64F)
+            J_sym.put(0, 0, j00)
+            J_sym.put(0, 1, (j01 + j10) / 2.0)
+            J_sym.put(1, 0, (j01 + j10) / 2.0)
+            J_sym.put(1, 1, j11)
+            
+            val eValSym = Mat()
+            val eVecSym = Mat()
+            Core.eigen(J_sym, eValSym, eVecSym)
+            
+            var axisDeg = 0.0
+            if (eVecSym.rows() >= 2 && eVecSym.cols() >= 2) {
+                val vx = eVecSym.get(0, 0)[0]
+                val vy = eVecSym.get(0, 1)[0]
+                axisDeg = atan2(vy, vx) * 180.0 / Math.PI
             }
-            var axisDeg = axisRad * 180.0 / PI
+            
             while (axisDeg < 0.0) axisDeg += 180.0
             while (axisDeg >= 180.0) axisDeg -= 180.0
             
             var sumDx = 0.0; var sumDy = 0.0
             for (i in 0 until numMeas) {
-                sumDx += (filteredTransformedLens[i].x - ptsToMeasureRef[i].x)
-                sumDy += (filteredTransformedLens[i].y - ptsToMeasureRef[i].y)
+                sumDx += retainedPairs[i].displacement.x
+                sumDy += retainedPairs[i].displacement.y
             }
             val meanDx = sumDx / numMeas
             val meanDy = sumDy / numMeas
@@ -1057,14 +1098,19 @@ object V4OpticalAnalyzer {
                 lensDotCount = baseLensDotCount,
                 meanDx = meanDx,
                 meanDy = meanDy,
-                referencePoints = ptsToMeasureRef,
-                observedPoints = filteredTransformedLens,
-                localOutlierRejections = localOutlierIndices.size,
-                crossingVectorRejections = crossingIndices.size,
+                referencePoints = opticalPairs.map { it.reference },
+                observedPoints = opticalPairs.map { it.observed },
+                localOutlierRejections = opticalPairs.count { it.status == "LOCAL_OUTLIER" },
+                crossingVectorRejections = opticalPairs.count { it.status == "CROSSING_REJECTED" },
                 medianLocalResidual = medianLocalRes,
                 madLocalResidual = madLocalRes,
-                opticalRejectedReferencePoints = optRejectedRefPts,
-                opticalRejectedObservedPoints = optRejectedLensPts,
+                opticalRejectedReferencePoints = opticalPairs.filter { it.status != "RETAINED" }.map { it.reference },
+                opticalRejectedObservedPoints = opticalPairs.filter { it.status != "RETAINED" }.map { it.observed },
+                dispMedian = dispMedian,
+                dispMAD = dispMAD,
+                dispP90 = dispP90,
+                dispMax = dispMax,
+                pairs = opticalPairs,
                 refWidth = w.toInt(),
                 refHeight = h.toInt(),
                 registrationModel = registrationModel,
@@ -1123,13 +1169,28 @@ object V4OpticalAnalyzer {
             checkCv(anisotropicMean, anisotropicStd, "ANISO")
         )
         
-        val l1_vals = results.map { it.lambda1 }.sorted()
-        val spreadFails = l1_vals.last() - l1_vals.first() > 0.15
         
-        if (fails.isNotEmpty() || spreadFails) {
-            val reason = if (fails.isNotEmpty()) fails.joinToString(", ") else "Lambda1 spread > 0.15"
-            return@withContext V4Result(success = false, errorMessage = "OPTICAL REPEATABILITY: FAILED ($reason)", allRuns = results, lastRunResult = results.last())
+        val l1_vals = results.map { it.lambda1 }.sorted()
+        val l2_vals = results.map { it.lambda2 }.sorted()
+        val iso_vals = results.map { it.isotropic }.sorted()
+        val aniso_vals = results.map { it.anisotropic }.sorted()
+        
+        val l1Spread = l1_vals.last() - l1_vals.first()
+        val l2Spread = l2_vals.last() - l2_vals.first()
+        val isoSpread = iso_vals.last() - iso_vals.first()
+        val anisoSpread = aniso_vals.last() - aniso_vals.first()
+        
+        val spreadFails = mutableListOf<String>()
+        if (l1Spread > 0.04) spreadFails.add("L1 spread=${String.format("%.3f", l1Spread)}")
+        if (l2Spread > 0.03) spreadFails.add("L2 spread=${String.format("%.3f", l2Spread)}")
+        if (isoSpread > 0.03) spreadFails.add("ISO spread=${String.format("%.3f", isoSpread)}")
+        if (anisoSpread > 0.03) spreadFails.add("ANISO spread=${String.format("%.3f", anisoSpread)}")
+        
+        if (fails.isNotEmpty() || spreadFails.isNotEmpty()) {
+            val reason = (fails + spreadFails).joinToString(", ")
+            return@withContext V4Result(success = false, errorMessage = "MEASUREMENT UNSTABLE ($reason)", allRuns = results, lastRunResult = results.last())
         }
+
 
         var axisDisplay = "UNRELIABLE"
 
@@ -1215,32 +1276,31 @@ object V4OpticalAnalyzer {
         val paintOptRejLens = Paint().apply { color = Color.MAGENTA; style = Paint.Style.FILL; isAntiAlias = true }
         val paintOptRejArrow = Paint().apply { color = Color.GRAY; strokeWidth = 1f; style = Paint.Style.STROKE; isAntiAlias = true }
 
-        val sizeOptRej = min(run.opticalRejectedReferencePoints.size, run.opticalRejectedObservedPoints.size)
-        for (i in 0 until sizeOptRej) {
-            val refPt = run.opticalRejectedReferencePoints[i]
-            val lensPt = run.opticalRejectedObservedPoints[i]
-            
-            canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintOptRejRef)
-            
+        
+        val paintLocalRejArrow = Paint().apply { color = Color.argb(200, 255, 165, 0); strokeWidth = 1f; style = Paint.Style.STROKE; isAntiAlias = true } // ORANGE
+        val paintCrossRejArrow = Paint().apply { color = Color.MAGENTA; strokeWidth = 1.5f; style = Paint.Style.STROKE; isAntiAlias = true }
+        
+        for (pair in run.pairs) {
+            val refPt = pair.reference
+            val lensPt = pair.observed
             val dx = (lensPt.x - refPt.x) * mag
             val dy = (lensPt.y - refPt.y) * mag
             
-            canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintOptRejLens)
-            canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintOptRejArrow)
+            if (pair.status == "RETAINED") {
+                canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintRef)
+                canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintLens)
+                canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintArrow)
+            } else if (pair.status == "LOCAL_OUTLIER") {
+                canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintOptRejRef)
+                canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintOptRejLens)
+                canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintLocalRejArrow)
+            } else { // CROSSING_REJECTED or GLOBAL_OUTLIER
+                canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintOptRejRef)
+                canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintOptRejLens)
+                canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintCrossRejArrow)
+            }
         }
 
-        for (i in 0 until limit) {
-            val refPt = run.referencePoints[i]
-            val lensPt = run.observedPoints[i]
-            
-            canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintRef)
-            
-            val dx = (lensPt.x - refPt.x) * mag
-            val dy = (lensPt.y - refPt.y) * mag
-            
-            canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintLens)
-            canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintArrow)
-        }
         
         return bitmap
     }

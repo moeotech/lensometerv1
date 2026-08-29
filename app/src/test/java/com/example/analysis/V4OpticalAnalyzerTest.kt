@@ -234,7 +234,7 @@ class V4OpticalAnalyzerTest {
         val result = V4OpticalAnalyzer.calculateRepeatability(listOf(run1, run2, run3))
         
         assertFalse("Repeatability should fail due to high CV", result.success)
-        assertTrue(result.errorMessage.contains("OPTICAL REPEATABILITY: FAILED"))
+        assertTrue(result.errorMessage.contains("MEASUREMENT UNSTABLE"))
     }
 
     @Test
@@ -348,5 +348,57 @@ class V4OpticalAnalyzerTest {
         assertEquals("L1 should be ~0 since rotation is factored out", 0.0, result.lambda1, 0.001)
         assertEquals("L2 should be ~0 since rotation is factored out", 0.0, result.lambda2, 0.001)
         assertEquals("0 outliers", 0, result.localOutlierRejections)
+    }
+
+    @Test
+    fun testO_repeatabilityGateUnstable() = kotlinx.coroutines.runBlocking {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        // Run 1: Isotropic 0.01
+        val lensPts1 = refPts.map { Point(it.x + (it.x - 400)*0.01, it.y + (it.y - 300)*0.01) }
+        val r1 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts1, w, h, refPts.size, lensPts1.size, 30.0)
+        
+        // Run 2: Isotropic 0.03
+        val lensPts2 = refPts.map { Point(it.x + (it.x - 400)*0.03, it.y + (it.y - 300)*0.03) }
+        val r2 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts2, w, h, refPts.size, lensPts2.size, 30.0)
+        
+        // Run 3: Isotropic -0.01
+        val lensPts3 = refPts.map { Point(it.x - (it.x - 400)*0.01, it.y - (it.y - 300)*0.01) }
+        val r3 = V4OpticalAnalyzer.analyzePoints(refPts, lensPts3, w, h, refPts.size, lensPts3.size, 30.0)
+        
+        val finalResult = V4OpticalAnalyzer.calculateRepeatability(listOf(r1, r2, r3))
+        
+        assertFalse("Measurement should be unstable", finalResult.success)
+        assertTrue(finalResult.errorMessage.contains("MEASUREMENT UNSTABLE"))
+    }
+
+    @Test
+    fun testP_robustness_grossLongVectorRejected() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val lensPts = refPts.map { Point(it.x + (it.x - 400)*0.01, it.y + (it.y - 300)*0.01) }.toMutableList()
+        // Inject a gross long vector
+        if (lensPts.size > 100) {
+            lensPts[100] = Point(lensPts[100].x + 200.0, lensPts[100].y - 200.0)
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        assertTrue(result.opticalRejectedObservedPoints.isNotEmpty())
+        assertTrue(result.localOutlierRejections > 0 || result.crossingVectorRejections > 0 || result.pairs.any { it.status == "GLOBAL_OUTLIER" })
+    }
+
+    @Test
+    fun testQ_pairedIntegrity() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        val lensPts = refPts.map { Point(it.x + 1.0, it.y - 1.0) }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        assertEquals("Pairs size should match returned retained point lists sizes", result.referencePoints.size, result.observedPoints.size)
+        assertEquals("Pairs size should match retained pairs", result.pairs.count { it.status == "RETAINED" }, result.referencePoints.size)
     }
 }
