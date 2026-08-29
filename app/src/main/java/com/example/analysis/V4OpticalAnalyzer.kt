@@ -22,9 +22,16 @@ data class V4RunResult(
     val isotropic: Double = 0.0,
     val anisotropic: Double = 0.0,
     val trackedDots: Int = 0,
+    
+    val topologyMatchCount: Int = 0,
+    val registrationFeatureCount: Int = 0,
+    val registrationInliers: Int = 0,
     val registrationRms: Double = 0.0,
-    val ransacInliers: Int = 0,
+    
+    val opticalFieldInputCount: Int = 0,
+    val opticalFieldRetainedCount: Int = 0,
     val fieldFitRms: Double = 0.0,
+    
     val refDotCount: Int = 0,
     val lensDotCount: Int = 0,
     val meanDx: Double = 0.0,
@@ -34,18 +41,17 @@ data class V4RunResult(
     val refWidth: Int = 0,
     val refHeight: Int = 0,
     val globalScaleAmbiguous: Boolean = false,
-    val framesCaptured: Int = 0,
-    val framesAccepted: Int = 0,
-    val framesRejected: Int = 0,
     val candidateMatches: Int = 0,
     val acceptedMatches: Int = 0,
-    val rejectedMatches: Int = 0,
-    val matrixRank: Int = 0,
-    val conditionNumber: Double = 0.0,
-    val degeneracyStatus: String = "OK",
     val matchRejections: Map<String, Int> = emptyMap(),
     val spatialCoveragePct: Double = 0.0,
     val quadrantCoverage: Int = 0,
+    val matrixRank: Int = 0,
+    val conditionNumber: Double = 0.0,
+    val degeneracyStatus: String = "",
+    val framesCaptured: Int = 0,
+    val framesAccepted: Int = 0,
+    val framesRejected: Int = 0,
     val temporalTrackCount: Int = 0,
     val stableTrackCount: Int = 0,
     val medianTrackLifetime: Double = 0.0,
@@ -70,7 +76,7 @@ data class V4Result(
     val allRuns: List<V4RunResult> = emptyList(),
     val trackedDots: Int = 0,
     val registrationRms: Double = 0.0,
-    val ransacInliers: Int = 0,
+    val registrationInliers: Int = 0,
     val fieldFitRms: Double = 0.0,
     val refDotCount: Int = 0,
     val lensDotCount: Int = 0,
@@ -621,57 +627,9 @@ object V4OpticalAnalyzer {
             mask.get(0, 0, maskArray)
             inliersCount = maskArray.count { it.toInt() != 0 }
             
-            val ptsToMeasureRef = mutableListOf<Point>()
-            val ptsToMeasureLens = mutableListOf<Point>()
-            
-            if (useRigidFallback) {
-                for (i in matchedRef.indices) {
-                    if (maskArray[i].toInt() != 0) {
-                        ptsToMeasureRef.add(matchedRef[i])
-                        ptsToMeasureLens.add(matchedLens[i])
-                    } else {
-                        rejections["ransac_rejection"] = rejections.getOrDefault("ransac_rejection", 0) + 1
-                    }
-                }
-            } else {
-                for (i in anchorRef.indices) {
-                    if (maskArray[i].toInt() == 0) {
-                        rejections["ransac_rejection"] = rejections.getOrDefault("ransac_rejection", 0) + 1
-                    }
-                }
-                ptsToMeasureRef.addAll(measurementRef)
-                ptsToMeasureLens.addAll(measurementLens)
-            }
-            
-            if (ptsToMeasureRef.size < 6) {
-                 return V4RunResult(success = false, errorMessage = "Insufficient measurement points (<6)", candidateMatches = matchedRef.size, acceptedMatches = inliersCount, matchRejections = rejections)
-            }
-            
-            var q1 = false; var q2 = false; var q3 = false; var q4 = false
-            var minX = Double.MAX_VALUE; var maxX = -Double.MAX_VALUE
-            var minY = Double.MAX_VALUE; var maxY = -Double.MAX_VALUE
-            
-            for (pt in ptsToMeasureRef) {
-                if (pt.x < cx && pt.y < cy) q1 = true
-                if (pt.x >= cx && pt.y < cy) q2 = true
-                if (pt.x < cx && pt.y >= cy) q3 = true
-                if (pt.x >= cx && pt.y >= cy) q4 = true
-                
-                if (pt.x < minX) minX = pt.x
-                if (pt.x > maxX) maxX = pt.x
-                if (pt.y < minY) minY = pt.y
-                if (pt.y > maxY) maxY = pt.y
-            }
-            
-            val quadCount = (if (q1) 1 else 0) + (if (q2) 1 else 0) + (if (q3) 1 else 0) + (if (q4) 1 else 0)
-            val spreadX = maxX - minX
-            val spreadY = maxY - minY
-            val spatialCoveragePct = ((spreadX * spreadY) / (w * h)) * 100.0
-            
-            if (quadCount < 2 || spreadX < w * 0.1 || spreadY < h * 0.1) {
-                rejections["roi_rejection"] = rejections.getOrDefault("roi_rejection", 0) + ptsToMeasureRef.size
-                return V4RunResult(success = false, errorMessage = "Poor spatial coverage (quads: $quadCount, spread: ${spreadX.toInt()}x${spreadY.toInt()})", candidateMatches = matchedRef.size, acceptedMatches = ptsToMeasureRef.size, matchRejections = rejections, spatialCoveragePct = spatialCoveragePct, quadrantCoverage = quadCount)
-            }
+            // Optical points to measure: Always all topology matches
+            val ptsToMeasureRef = matchedRef.toMutableList()
+            val ptsToMeasureLens = matchedLens.toMutableList()
             
             val srcMeasMat = MatOfPoint2f()
             srcMeasMat.fromList(ptsToMeasureLens)
@@ -700,27 +658,26 @@ object V4OpticalAnalyzer {
                 registrationRms = sqrt(rSum / max(1, inliersCount))
             } else {
                 var rSum = 0.0
-                for (i in ptsToMeasureRef.indices) {
-                    val dx = transformedLens[i].x - ptsToMeasureRef[i].x
-                    val dy = transformedLens[i].y - ptsToMeasureRef[i].y
-                    rSum += dx * dx + dy * dy
+                for (i in matchedRef.indices) {
+                    if (maskArray[i].toInt() != 0) {
+                        val dx = transformedLens[i].x - matchedRef[i].x
+                        val dy = transformedLens[i].y - matchedRef[i].y
+                        rSum += dx * dx + dy * dy
+                    }
                 }
-                registrationRms = sqrt(rSum / max(1, ptsToMeasureRef.size))
+                registrationRms = sqrt(rSum / max(1, inliersCount))
             }
             
-            var sumDx = 0.0
-            var sumDy = 0.0
-            for (i in ptsToMeasureRef.indices) {
-                sumDx += (transformedLens[i].x - ptsToMeasureRef[i].x)
-                sumDy += (transformedLens[i].y - ptsToMeasureRef[i].y)
+            // IRLS for robust optical field fit
+            val numMeas = ptsToMeasureRef.size
+            if (numMeas < 6) {
+                 return V4RunResult(success = false, errorMessage = "Insufficient measurement points (<6)", candidateMatches = matchedRef.size, acceptedMatches = inliersCount, matchRejections = rejections)
             }
-            val meanDx = sumDx / ptsToMeasureRef.size
-            val meanDy = sumDy / ptsToMeasureRef.size
             
-            val A = Mat(ptsToMeasureRef.size, 3, CvType.CV_64F)
-            val B = Mat(ptsToMeasureRef.size, 2, CvType.CV_64F)
+            val A = Mat(numMeas, 3, CvType.CV_64F)
+            val B = Mat(numMeas, 2, CvType.CV_64F)
             
-            for (i in ptsToMeasureRef.indices) {
+            for (i in 0 until numMeas) {
                 A.put(i, 0, ptsToMeasureRef[i].x)
                 A.put(i, 1, ptsToMeasureRef[i].y)
                 A.put(i, 2, 1.0)
@@ -729,10 +686,119 @@ object V4OpticalAnalyzer {
                 B.put(i, 1, transformedLens[i].y - ptsToMeasureRef[i].y)
             }
             
-            val W = Mat()
-            val U = Mat()
-            val Vt = Mat()
-            Core.SVDecomp(A, W, U, Vt)
+            val J_matrix = Mat(3, 2, CvType.CV_64F)
+            val weights = DoubleArray(numMeas) { 1.0 }
+            val huberK = 1.345
+            
+            var j00 = 0.0; var j10 = 0.0; var j01 = 0.0; var j11 = 0.0
+            var c0 = 0.0; var c1 = 0.0
+            
+            for (iter in 0 until 5) {
+                val AW = Mat(numMeas, 3, CvType.CV_64F)
+                val BW = Mat(numMeas, 2, CvType.CV_64F)
+                for (i in 0 until numMeas) {
+                    val w = sqrt(weights[i])
+                    AW.put(i, 0, A.get(i, 0)[0] * w)
+                    AW.put(i, 1, A.get(i, 1)[0] * w)
+                    AW.put(i, 2, A.get(i, 2)[0] * w)
+                    
+                    BW.put(i, 0, B.get(i, 0)[0] * w)
+                    BW.put(i, 1, B.get(i, 1)[0] * w)
+                }
+                
+                try {
+                    Core.solve(AW, BW, J_matrix, Core.DECOMP_SVD)
+                } catch (e: Exception) {
+                    return V4RunResult(success = false, errorMessage = "IRLS solve failed: ${e.message}", candidateMatches = matchedRef.size, matchRejections = rejections)
+                }
+                
+                j00 = J_matrix.get(0, 0)[0]
+                j10 = J_matrix.get(0, 1)[0]
+                j01 = J_matrix.get(1, 0)[0]
+                j11 = J_matrix.get(1, 1)[0]
+                c0 = J_matrix.get(2, 0)[0]
+                c1 = J_matrix.get(2, 1)[0]
+                
+                val errors = DoubleArray(numMeas)
+                for (i in 0 until numMeas) {
+                    val x = A.get(i, 0)[0]
+                    val y = A.get(i, 1)[0]
+                    val errX = (j00 * x + j01 * y + c0) - B.get(i, 0)[0]
+                    val errY = (j10 * x + j11 * y + c1) - B.get(i, 1)[0]
+                    errors[i] = sqrt(errX * errX + errY * errY)
+                }
+                
+                val sortedErrors = errors.sorted()
+                val medianErr = sortedErrors[sortedErrors.size / 2]
+                val sigma = max(medianErr / 0.6745, 1e-5)
+                
+                for (i in 0 until numMeas) {
+                    val r = errors[i] / sigma
+                    weights[i] = if (r <= huberK) 1.0 else huberK / r
+                }
+            }
+            
+            var opticalFieldRetainedCount = 0
+            val finalPtsToMeasureRef = mutableListOf<Point>()
+            var q1 = false; var q2 = false; var q3 = false; var q4 = false
+            var minX = Double.MAX_VALUE; var maxX = -Double.MAX_VALUE
+            var minY = Double.MAX_VALUE; var maxY = -Double.MAX_VALUE
+            
+            var fieldFitRmsSum = 0.0
+            
+            for (i in 0 until numMeas) {
+                if (weights[i] > 0.5) {
+                    opticalFieldRetainedCount++
+                    val pt = ptsToMeasureRef[i]
+                    finalPtsToMeasureRef.add(pt)
+                    
+                    if (pt.x < cx && pt.y < cy) q1 = true
+                    if (pt.x >= cx && pt.y < cy) q2 = true
+                    if (pt.x < cx && pt.y >= cy) q3 = true
+                    if (pt.x >= cx && pt.y >= cy) q4 = true
+                    
+                    if (pt.x < minX) minX = pt.x
+                    if (pt.x > maxX) maxX = pt.x
+                    if (pt.y < minY) minY = pt.y
+                    if (pt.y > maxY) maxY = pt.y
+                    
+                    val x = pt.x
+                    val y = pt.y
+                    val u = j00 * x + j01 * y + c0
+                    val v = j10 * x + j11 * y + c1
+                    
+                    val dx = transformedLens[i].x - x
+                    val dy = transformedLens[i].y - y
+                    
+                    fieldFitRmsSum += (u - dx) * (u - dx) + (v - dy) * (v - dy)
+                }
+            }
+            
+            val fieldFitRms = sqrt(fieldFitRmsSum / max(1, opticalFieldRetainedCount))
+            
+            val quadCount = (if (q1) 1 else 0) + (if (q2) 1 else 0) + (if (q3) 1 else 0) + (if (q4) 1 else 0)
+            val spreadX = if (maxX > minX) maxX - minX else 0.0
+            val spreadY = if (maxY > minY) maxY - minY else 0.0
+            val spatialCoveragePct = ((spreadX * spreadY) / (w * h)) * 100.0
+            
+            if (opticalFieldRetainedCount < 6) {
+                 return V4RunResult(success = false, errorMessage = "Insufficient retained measurement points (<6)", candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matchRejections = rejections)
+            }
+            
+            if (quadCount < 2 || spreadX < w * 0.1 || spreadY < h * 0.1) {
+                rejections["roi_rejection"] = rejections.getOrDefault("roi_rejection", 0) + opticalFieldRetainedCount
+                return V4RunResult(success = false, errorMessage = "Poor spatial coverage (quads: $quadCount, spread: ${spreadX.toInt()}x${spreadY.toInt()})", candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matchRejections = rejections, spatialCoveragePct = spatialCoveragePct, quadrantCoverage = quadCount)
+            }
+            
+            // Recompute SVDecomp for degeneracy check using just retained points
+            val AW_final = Mat(opticalFieldRetainedCount, 3, CvType.CV_64F)
+            for (i in 0 until opticalFieldRetainedCount) {
+                AW_final.put(i, 0, finalPtsToMeasureRef[i].x)
+                AW_final.put(i, 1, finalPtsToMeasureRef[i].y)
+                AW_final.put(i, 2, 1.0)
+            }
+            val W = Mat(); val U = Mat(); val Vt = Mat()
+            Core.SVDecomp(AW_final, W, U, Vt)
             
             var rank = 0
             var maxSingular = 0.0
@@ -746,7 +812,6 @@ object V4OpticalAnalyzer {
                 }
             }
             val cond = if (minSingular > 0.0) maxSingular / minSingular else Double.MAX_VALUE
-            
             var degeneracyStatus = "OK"
             if (rank < 3) {
                 degeneracyStatus = "RANK_DEFICIENT"
@@ -756,81 +821,65 @@ object V4OpticalAnalyzer {
             
             if (degeneracyStatus != "OK") {
                  return V4RunResult(success = false, errorMessage = "Degenerate geometric configuration: $degeneracyStatus",
-                     candidateMatches = matchedRef.size, acceptedMatches = ptsToMeasureRef.size, matrixRank = rank, conditionNumber = cond, degeneracyStatus = degeneracyStatus, matchRejections = rejections)
+                     candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = degeneracyStatus, matchRejections = rejections)
             }
-            
-            val J_matrix = Mat()
-            try {
-                Core.solve(A, B, J_matrix, Core.DECOMP_SVD)
-            } catch (e: Exception) {
-                return V4RunResult(success = false, errorMessage = "OpenCV solve failed: ${e.message}",
-                     candidateMatches = matchedRef.size, acceptedMatches = ptsToMeasureRef.size, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "SOLVE_EXCEPTION", matchRejections = rejections)
-            }
-            
-            val j00 = J_matrix.get(0, 0)[0]
-            val j10 = J_matrix.get(0, 1)[0]
-            val j01 = J_matrix.get(1, 0)[0]
-            val j11 = J_matrix.get(1, 1)[0]
             
             if (j00.isNaN() || j10.isNaN() || j01.isNaN() || j11.isNaN() ||
                 j00.isInfinite() || j10.isInfinite() || j01.isInfinite() || j11.isInfinite()) {
                 return V4RunResult(success = false, errorMessage = "NaN/Infinity in optical field solution",
-                     candidateMatches = matchedRef.size, acceptedMatches = ptsToMeasureRef.size, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "NAN_INF", matchRejections = rejections)
+                     candidateMatches = matchedRef.size, acceptedMatches = opticalFieldRetainedCount, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "NAN_INF", matchRejections = rejections)
             }
             
-            var fieldFitRmsSum = 0.0
-            for (i in ptsToMeasureRef.indices) {
-                val x = ptsToMeasureRef[i].x
-                val y = ptsToMeasureRef[i].y
-                val u = j00 * x + j01 * y + J_matrix.get(2, 0)[0]
-                val v = j10 * x + j11 * y + J_matrix.get(2, 1)[0]
-                
-                val dx = transformedLens[i].x - ptsToMeasureRef[i].x
-                val dy = transformedLens[i].y - ptsToMeasureRef[i].y
-                
-                val diffU = u - dx
-                val diffV = v - dy
-                fieldFitRmsSum += diffU * diffU + diffV * diffV
+            val t = j00 + j11
+            val d = j00 * j11 - j01 * j10
+            val disc = t * t - 4 * d
+            
+            var l1 = 0.0; var l2 = 0.0
+            if (disc >= 0) {
+                l1 = (t + sqrt(disc)) / 2.0
+                l2 = (t - sqrt(disc)) / 2.0
+            } else {
+                l1 = t / 2.0
+                l2 = t / 2.0
             }
-            val fieldFitRms = sqrt(fieldFitRmsSum / ptsToMeasureRef.size)
             
-            val maxAllowedRms = max(2.0, spacing * 0.15)
-            if (fieldFitRms > maxAllowedRms) {
-                rejections["low_confidence"] = rejections.getOrDefault("low_confidence", 0) + ptsToMeasureRef.size
-                return V4RunResult(success = false, errorMessage = "Poor field fit (RMS $fieldFitRms > $maxAllowedRms)",
-                     candidateMatches = matchedRef.size, acceptedMatches = ptsToMeasureRef.size, matrixRank = rank, conditionNumber = cond, degeneracyStatus = "POOR_FIT", matchRejections = rejections, fieldFitRms = fieldFitRms)
+            if (abs(l2) > abs(l1)) {
+                val temp = l1; l1 = l2; l2 = temp
             }
-
-            val s00 = j00
-            val s11 = j11
-            val s01 = 0.5 * (j01 + j10)
             
-            val trace = s00 + s11
-            val det = s00 * s11 - s01 * s01
+            val iso = (l1 + l2) / 2.0
+            val aniso = (l1 - l2) / 2.0
             
-            val lambda1 = trace / 2.0 + sqrt(max(0.0, (trace * trace) / 4.0 - det))
-            val lambda2 = trace / 2.0 - sqrt(max(0.0, (trace * trace) / 4.0 - det))
+            var axisRad = 0.0
+            if (abs(j10 + j01) > 1e-6) {
+                axisRad = 0.5 * atan2(j10 + j01, j00 - j11)
+            }
+            var axisDeg = axisRad * 180.0 / PI
+            if (axisDeg < 0) axisDeg += 180.0
             
-            val dirX = lambda1 - s11
-            val dirY = s01
-            val angleRad = atan2(dirY, dirX)
-            var axis = (angleRad * 180.0 / Math.PI)
-            if (axis < 0) axis += 180.0
-            if (axis >= 180.0) axis -= 180.0
-            
-            val isotropic = (lambda1 + lambda2) / 2.0
-            val anisotropic = abs(lambda1 - lambda2)
+            var sumDx = 0.0; var sumDy = 0.0
+            for (i in 0 until numMeas) {
+                sumDx += (transformedLens[i].x - ptsToMeasureRef[i].x)
+                sumDy += (transformedLens[i].y - ptsToMeasureRef[i].y)
+            }
+            val meanDx = sumDx / numMeas
+            val meanDy = sumDy / numMeas
             
             return V4RunResult(
                 success = true,
-                axis = axis,
-                lambda1 = lambda1,
-                lambda2 = lambda2,
-                isotropic = isotropic,
-                anisotropic = anisotropic,
-                trackedDots = ptsToMeasureRef.size,
+                errorMessage = "OK",
+                axis = axisDeg,
+                lambda1 = l1,
+                lambda2 = l2,
+                isotropic = iso,
+                anisotropic = aniso,
+                trackedDots = numMeas,
+                topologyMatchCount = matchedRef.size,
+                registrationFeatureCount = if (useRigidFallback) matchedRef.size else anchorRef.size,
+                registrationInliers = inliersCount,
                 registrationRms = registrationRms,
-                ransacInliers = inliersCount,
+                opticalFieldInputCount = numMeas,
+                opticalFieldRetainedCount = opticalFieldRetainedCount,
                 fieldFitRms = fieldFitRms,
                 refDotCount = baseRefDotCount,
                 lensDotCount = baseLensDotCount,
@@ -842,18 +891,17 @@ object V4OpticalAnalyzer {
                 refHeight = h.toInt(),
                 globalScaleAmbiguous = globalScaleAmbiguous,
                 candidateMatches = matchedRef.size,
-                acceptedMatches = ptsToMeasureRef.size,
-                rejectedMatches = matchedRef.size - ptsToMeasureRef.size,
-                matrixRank = rank,
-                conditionNumber = cond,
-                degeneracyStatus = degeneracyStatus,
+                acceptedMatches = opticalFieldRetainedCount,
                 matchRejections = rejections,
                 spatialCoveragePct = spatialCoveragePct,
-                quadrantCoverage = quadCount
+                quadrantCoverage = quadCount,
+                matrixRank = rank,
+                conditionNumber = cond,
+                degeneracyStatus = degeneracyStatus
             )
         } catch (e: Exception) {
             Log.e("V4OpticalAnalyzer", "AnalyzePoints failed", e)
-            return V4RunResult(success = false, errorMessage = "Exception: ${e.message}", degeneracyStatus = "EXCEPTION", matchRejections = rejections)
+            return V4RunResult(success = false, errorMessage = "Exception: ${e.message}")
         }
     }
     suspend fun calculateRepeatability(results: List<V4RunResult>): V4Result = withContext(Dispatchers.Default) {
@@ -917,7 +965,7 @@ object V4OpticalAnalyzer {
             allRuns = results,
             trackedDots = lastRun.trackedDots,
             registrationRms = lastRun.registrationRms,
-            ransacInliers = lastRun.ransacInliers,
+            registrationInliers = lastRun.registrationInliers,
             fieldFitRms = lastRun.fieldFitRms,
             refDotCount = lastRun.refDotCount,
             lensDotCount = lastRun.lensDotCount,
