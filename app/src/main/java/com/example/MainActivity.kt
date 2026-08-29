@@ -24,15 +24,25 @@ import androidx.compose.ui.unit.dp
 import com.example.ui.ExperimentScreen
 import com.example.ui.FocusExperimentScreen
 import com.example.ui.LensExperimentScreen
+import com.example.ui.V4ExperimentScreen
 import com.example.ui.theme.MyApplicationTheme
 
+import org.opencv.android.OpenCVLoader
+import android.util.Log
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    try {
+        System.loadLibrary("opencv_java4")
+        Log.d("OpenCV", "OpenCV loaded successfully via System.loadLibrary")
+    } catch (e: UnsatisfiedLinkError) {
+        Log.e("OpenCV", "Unable to load OpenCV: ${e.message}")
+    }
+
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
       MyApplicationTheme {
-        var currentTab by remember { mutableStateOf(3) }
+        var currentTab by remember { mutableStateOf(4) }
         
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
           Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
@@ -56,7 +66,6 @@ class MainActivity : ComponentActivity() {
                         contentColor = if (currentTab == 2) Color(0xFF381E72) else Color.White
                     )
                 ) { Text("V2") }
-
                 Button(
                     onClick = { currentTab = 3 },
                     modifier = Modifier.weight(1f),
@@ -66,6 +75,15 @@ class MainActivity : ComponentActivity() {
                         contentColor = if (currentTab == 3) Color(0xFF381E72) else Color.White
                     )
                 ) { Text("V3 LENS") }
+                Button(
+                    onClick = { currentTab = 4 },
+                    modifier = Modifier.weight(1f),
+                    shape = RectangleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (currentTab == 4) Color(0xFFD0BCFF) else Color(0xFF2B2930),
+                        contentColor = if (currentTab == 4) Color(0xFF381E72) else Color.White
+                    )
+                ) { Text("V4") }
             }
             
             androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
@@ -73,6 +91,7 @@ class MainActivity : ComponentActivity() {
                   1 -> ExperimentScreen()
                   2 -> FocusExperimentScreen()
                   3 -> LensExperimentScreen()
+                  4 -> V4ExperimentScreen()
               }
             }
           }

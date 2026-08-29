@@ -87,13 +87,27 @@ fun LensExperimentScreen() {
     var stableLensGeom by remember { mutableStateOf<LensGeometry?>(null) }
     var imgW by remember { mutableIntStateOf(1) }
     var imgH by remember { mutableIntStateOf(1) }
+    var flashMode by remember { mutableStateOf("AUTO") }
     
     val ellipseHistory = remember { mutableListOf<RotatedRect>() }
 
-    LaunchedEffect(Unit) {
-        if (!OpenCVLoader.initDebug()) {
-            android.util.Log.e("OpenCV", "Initialization failed")
-        }
+
+
+    LaunchedEffect(flashMode, cameraControlRef) {
+        try {
+            when (flashMode) {
+                "ON" -> cameraControlRef?.enableTorch(true)
+                "OFF" -> cameraControlRef?.enableTorch(false)
+                "AUTO" -> {
+                    cameraControlRef?.enableTorch(false)
+                    camera2ControlRef?.let { c2c ->
+                        val builder = CaptureRequestOptions.Builder()
+                        builder.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
+                        c2c.captureRequestOptions = builder.build()
+                    }
+                }
+            }
+        } catch (e: Exception) {}
     }
 
     LaunchedEffect(isStable, phase) {
@@ -110,138 +124,133 @@ fun LensExperimentScreen() {
         } else {
             progress = 0f
             autoCaptureTriggered = false
+
         }
     }
-
     val lifecycle = lifecycleOwner.lifecycle
     DisposableEffect(lifecycleOwner) {
+        var isDisposed = false
         val analysisExecutor = Executors.newSingleThreadExecutor()
         var imageAnalysisRef: ImageAnalysis? = null
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+
                 cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build()
-                    previewRef = preview
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        if (isDisposed) return@postDelayed
+
+                        val cameraProvider = cameraProviderFuture.get()
+                        val preview = Preview.Builder().build()
+                        previewRef = preview
                     
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                        .also { analysis ->
-                        analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                            try {
-                                if (phase == LensExperimentPhase.ALIGN_LENS) {
-                                    val bmp = proxyToBitmap(imageProxy)
-                                    if (bmp != null) {
-                                        imgW = bmp.width
-                                        imgH = bmp.height
-                                        val ell = detectLensEllipse(bmp)
-                                        detectedEllipse = ell
-                                        if (ell != null) {
-                                            ellipseHistory.add(ell)
-                                            if (ellipseHistory.size > 10) {
-                                                ellipseHistory.removeAt(0)
-                                            }
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
+                            .also { analysis ->
+                            analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                                try {
+                                    if (phase == LensExperimentPhase.ALIGN_LENS) {
+                                        val bmp = proxyToBitmap(imageProxy)
+                                        if (bmp != null) {
+                                            imgW = bmp.width
+                                            imgH = bmp.height
+                                            val ell = detectLensEllipse(bmp)
+                                            detectedEllipse = ell
+                                            if (ell != null) {
+                                                ellipseHistory.add(ell)
+                                                if (ellipseHistory.size > 10) {
+                                                    ellipseHistory.removeAt(0)
+                                                }
                                             
-                                            val cx = ell.center.x
-                                            val cy = ell.center.y
-                                            val w = imgW
-                                            val h = imgH
+                                                val cx = ell.center.x
+                                                val cy = ell.center.y
+                                                val w = imgW
+                                                val h = imgH
                                             
-                                            // 1. Check Centering
-                                            if (cx < w * 0.4) alignMessage = "MOVE RIGHT"
-                                            else if (cx > w * 0.6) alignMessage = "MOVE LEFT"
-                                            else if (cy < h * 0.4) alignMessage = "MOVE DOWN"
-                                            else if (cy > h * 0.6) alignMessage = "MOVE UP"
-                                            else {
-                                                // 2. Check Size (Distance)
-                                                val sizeRatio = max(ell.size.width, ell.size.height) / min(w, h).toDouble()
-                                                if (sizeRatio < 0.45) {
-                                                    alignMessage = "MOVE CLOSER"
-                                                    isStable = false
-                                                } else if (sizeRatio > 0.65) {
-                                                    alignMessage = "MOVE FARTHER"
-                                                    isStable = false
-                                                } else {
-                                                    // 3. Check Tilt (Aspect Ratio)
-                                                    val aspect = max(ell.size.width, ell.size.height) / min(ell.size.width, ell.size.height)
-                                                    if (aspect > 1.3) {
-                                                        alignMessage = "REDUCE TILT"
+                                                // 1. Check Centering
+                                                if (cx < w * 0.4) alignMessage = "MOVE RIGHT"
+                                                else if (cx > w * 0.6) alignMessage = "MOVE LEFT"
+                                                else if (cy < h * 0.4) alignMessage = "MOVE DOWN"
+                                                else if (cy > h * 0.6) alignMessage = "MOVE UP"
+                                                else {
+                                                    // 2. Check Size (Distance)
+                                                    val sizeRatio = max(ell.size.width, ell.size.height) / min(w, h).toDouble()
+                                                    if (sizeRatio < 0.45) {
+                                                        alignMessage = "MOVE CLOSER"
+                                                        isStable = false
+                                                    } else if (sizeRatio > 0.65) {
+                                                        alignMessage = "MOVE FARTHER"
                                                         isStable = false
                                                     } else {
-                                                        // 4. Temporal Stability
-                                                        if (ellipseHistory.size == 10) {
-                                                            val meanCx = ellipseHistory.map { it.center.x }.average()
-                                                            val meanCy = ellipseHistory.map { it.center.y }.average()
-                                                            val meanW = ellipseHistory.map { it.size.width }.average()
-                                                            val meanH = ellipseHistory.map { it.size.height }.average()
-                                                            val meanAngle = ellipseHistory.map { it.angle }.average()
+                                                        // 3. Check Tilt (Aspect Ratio)
+                                                        val aspect = max(ell.size.width, ell.size.height) / min(ell.size.width, ell.size.height)
+                                                        if (aspect > 1.3) {
+                                                            alignMessage = "REDUCE TILT"
+                                                            isStable = false
+                                                        } else {
+                                                            // 4. Temporal Stability
+                                                            if (ellipseHistory.size == 10) {
+                                                                val meanCx = ellipseHistory.map { it.center.x }.average()
+                                                                val meanCy = ellipseHistory.map { it.center.y }.average()
+                                                                val meanW = ellipseHistory.map { it.size.width }.average()
+                                                                val meanH = ellipseHistory.map { it.size.height }.average()
+                                                                val meanAngle = ellipseHistory.map { it.angle }.average()
                                                             
-                                                            val stdCx = sqrt(ellipseHistory.map { (it.center.x - meanCx).pow(2) }.average())
-                                                            val stdCy = sqrt(ellipseHistory.map { (it.center.y - meanCy).pow(2) }.average())
-                                                            val stdW = sqrt(ellipseHistory.map { (it.size.width - meanW).pow(2) }.average())
-                                                            val stdH = sqrt(ellipseHistory.map { (it.size.height - meanH).pow(2) }.average())
-                                                            val stdAngle = sqrt(ellipseHistory.map { (it.angle - meanAngle).pow(2) }.average())
+                                                                val stdCx = sqrt(ellipseHistory.map { (it.center.x - meanCx).pow(2) }.average())
+                                                                val stdCy = sqrt(ellipseHistory.map { (it.center.y - meanCy).pow(2) }.average())
+                                                                val stdW = sqrt(ellipseHistory.map { (it.size.width - meanW).pow(2) }.average())
+                                                                val stdH = sqrt(ellipseHistory.map { (it.size.height - meanH).pow(2) }.average())
+                                                                val stdAngle = sqrt(ellipseHistory.map { (it.angle - meanAngle).pow(2) }.average())
                                                             
-                                                            if (stdCx <= 15.0 && stdCy <= 15.0 && stdW <= 15.0 && stdH <= 15.0 && stdAngle <= 7.0) {
-                                                                alignMessage = "HOLD STILL"
-                                                                isStable = true
-                                                                stableLensGeom = LensGeometry(meanCx, meanCy, meanW, meanH, meanAngle)
+                                                                if (stdCx <= 15.0 && stdCy <= 15.0 && stdW <= 15.0 && stdH <= 15.0 && stdAngle <= 7.0) {
+                                                                    alignMessage = "HOLD STILL"
+                                                                    isStable = true
+                                                                    stableLensGeom = LensGeometry(meanCx, meanCy, meanW, meanH, meanAngle)
+                                                                } else {
+                                                                    alignMessage = "STABILIZING..."
+                                                                    isStable = false
+                                                                }
                                                             } else {
                                                                 alignMessage = "STABILIZING..."
                                                                 isStable = false
                                                             }
-                                                        } else {
-                                                            alignMessage = "STABILIZING..."
-                                                            isStable = false
                                                         }
                                                     }
                                                 }
+                                            } else {
+                                                alignMessage = "PLACE LENS IN CIRCLE"
+                                                isStable = false
+                                                ellipseHistory.clear()
                                             }
-                                        } else {
-                                            alignMessage = "PLACE LENS IN CIRCLE"
-                                            isStable = false
-                                            ellipseHistory.clear()
                                         }
+                                    } else {
+                                        isStable = true
                                     }
-                                } else {
-                                    isStable = true
+                                    frameCaptureCallback?.invoke(imageProxy)
+                                } finally {
+                                    imageProxy.close()
                                 }
-                                frameCaptureCallback?.invoke(imageProxy)
-                            } finally {
-                                imageProxy.close()
                             }
                         }
-                    }
-                    imageAnalysisRef = imageAnalysis
+                        imageAnalysisRef = imageAnalysis
                     
-                    try {
-                        cameraProvider.unbindAll()
-                        val camera = cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            imageAnalysis
-                        )
-                        cameraControlRef = camera.cameraControl
-                        camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)
-                    } catch (exc: Exception) {}
+                        try {
+                            cameraProvider.unbindAll()
+                            val camera = cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                CameraSelector.DEFAULT_BACK_CAMERA,
+                                preview,
+                                imageAnalysis
+                            )
+                            cameraControlRef = camera.cameraControl
+                            camera2ControlRef = Camera2CameraControl.from(camera.cameraControl)
+                        } catch (exc: Exception) {}
+                
+                    }, 1000)
                 }, ContextCompat.getMainExecutor(context))
-            } else if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) {
-                if (cameraProviderFuture.isDone) {
-                    val provider = cameraProviderFuture.get()
-                    imageAnalysisRef?.clearAnalyzer()
-                    provider.unbindAll()
-                }
-            }
-        }
-        
-        lifecycle.addObserver(observer)
         
         onDispose {
-            lifecycle.removeObserver(observer)
+            isDisposed = true
             if (cameraProviderFuture.isDone) {
                 val provider = cameraProviderFuture.get()
                 imageAnalysisRef?.clearAnalyzer()
@@ -293,8 +302,8 @@ fun LensExperimentScreen() {
                 delay(10)
             }
         }
-    }
 
+    }
     fun restoreAuto() {
         camera2ControlRef?.let { c2c ->
             val builder = CaptureRequestOptions.Builder()
@@ -335,9 +344,33 @@ fun LensExperimentScreen() {
                 }
             )
             
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+                    .background(Color(0x88000000), RoundedCornerShape(8.dp)),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                TextButton(onClick = { flashMode = "AUTO" }) {
+                    Text("AUTO", color = if (flashMode == "AUTO") Color.Yellow else Color.White)
+                }
+                TextButton(onClick = { flashMode = "ON" }) {
+                    Text("ON", color = if (flashMode == "ON") Color.Yellow else Color.White)
+                }
+                TextButton(onClick = { flashMode = "OFF" }) {
+                    Text("OFF", color = if (flashMode == "OFF") Color.Yellow else Color.White)
+                }
+            }
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = size.width / 2
                 val cy = size.height / 2
+                
+                // Fixed Crosshair
+                drawLine(Color.Red, Offset(cx - 20, cy), Offset(cx + 20, cy), 4f)
+                drawLine(Color.Red, Offset(cx, cy - 20), Offset(cx, cy + 20), 4f)
+
                 val radius = min(size.width, size.height) * 0.45f
                 
                 if (phase == LensExperimentPhase.ALIGN_NO_LENS) {
@@ -347,8 +380,7 @@ fun LensExperimentScreen() {
                         center = Offset(cx, cy),
                         style = Stroke(width = 4f)
                     )
-                    drawLine(Color.Red, Offset(cx - 20, cy), Offset(cx + 20, cy), 2f)
-                    drawLine(Color.Red, Offset(cx, cy - 20), Offset(cx, cy + 20), 2f)
+
                 } else {
                     val path = androidx.compose.ui.graphics.Path().apply {
                         addRect(androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height))
@@ -400,8 +432,7 @@ fun LensExperimentScreen() {
                                 size = androidx.compose.ui.geometry.Size((rw*2).toFloat(), (rh*2).toFloat()),
                                 style = Stroke(width = 6f)
                             )
-                            drawLine(Color.White, Offset(-15f, 0f), Offset(15f, 0f), 4f)
-                            drawLine(Color.White, Offset(0f, -15f), Offset(0f, 15f), 4f)
+
                         }
                     }
                 }
@@ -459,6 +490,13 @@ fun LensExperimentScreen() {
                                     val magFactor = 3.0f
                                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(res.imageWidth.toFloat() / res.imageHeight.toFloat()).border(1.dp, Color.Gray)) {
                                         Canvas(modifier = Modifier.fillMaxSize()) {
+                val cx = size.width / 2
+                val cy = size.height / 2
+                
+                // Fixed Crosshair
+                drawLine(Color.Red, Offset(cx - 20, cy), Offset(cx + 20, cy), 4f)
+                drawLine(Color.Red, Offset(cx, cy - 20), Offset(cx, cy + 20), 4f)
+
                                             val scaleX = size.width / res.imageWidth
                                             val scaleY = size.height / res.imageHeight
                                             
@@ -545,9 +583,9 @@ fun LensExperimentScreen() {
                         }
                     }
                 }
-            }
-        }
-    }
+}
+}
+}
 }
 
 fun proxyToBitmap(image: ImageProxy): Bitmap? {
@@ -605,4 +643,3 @@ fun detectLensEllipse(bitmap: Bitmap): RotatedRect? {
     mat.release(); gray.release(); edges.release(); hierarchy.release()
     return bestEllipse
 }
-
