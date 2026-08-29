@@ -510,4 +510,174 @@ class V4OpticalAnalyzerTest {
         assertEquals(kx, result.lambda1, 0.005)
         assertEquals(ky, result.lambda2, 0.005)
     }
+
+    @Test
+    fun testV_robustTensor_pureSphere() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val k = 0.02
+        val lensPts = refPts.map { 
+            val cx = it.x - 400.0
+            val cy = it.y - 300.0
+            Point(it.x + cx * k, it.y + cy * k) 
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        
+        assertEquals(k, result.lambda1, 0.005)
+        assertEquals(k, result.lambda2, 0.005)
+        assertEquals(k, result.isotropic, 0.005)
+        assertEquals(0.0, result.anisotropic, 0.005)
+        assertEquals(0.0, result.antisymmetricMag, 0.005)
+    }
+
+    @Test
+    fun testW_robustTensor_pureCylinder() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val k = 0.03
+        val lensPts = refPts.map { 
+            val cy = it.y - 300.0
+            Point(it.x, it.y + cy * k) 
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        
+        assertEquals(0.0, result.lambda2, 0.005)
+        assertEquals(k, result.lambda1, 0.005) // Note: l1 >= l2 in magnitude typically? Wait, it depends on axis. The analyzer returns l1, l2 sorted by magnitude.
+        assertEquals(k/2, result.isotropic, 0.005)
+        assertEquals(k, result.anisotropic, 0.005)
+        assertEquals(0.0, result.antisymmetricMag, 0.005)
+    }
+
+    @Test
+    fun testX_robustTensor_spherePlusCylinder() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val ks = 0.01
+        val kc = 0.02
+        val lensPts = refPts.map { 
+            val cx = it.x - 400.0
+            val cy = it.y - 300.0
+            Point(it.x + cx * ks, it.y + cy * ks + cy * kc) 
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        
+        assertEquals(ks + kc, result.lambda1, 0.005)
+        assertEquals(ks, result.lambda2, 0.005)
+    }
+
+    @Test
+    fun testY_robustTensor_translatedSphere() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val k = 0.02
+        val tx = 10.0; val ty = -5.0
+        val lensPts = refPts.map { 
+            val cx = it.x - 400.0
+            val cy = it.y - 300.0
+            Point(it.x + cx * k + tx, it.y + cy * k + ty) 
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        
+        assertEquals(k, result.lambda1, 0.005)
+        assertEquals(k, result.lambda2, 0.005)
+        assertEquals(tx, result.globalMotionX, 0.5)
+        assertEquals(ty, result.globalMotionY, 0.5)
+    }
+
+    @Test
+    fun testZ_robustTensor_rotatedCylinder() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val k = 0.03
+        // Apply cylinder along y=x diagonal
+        val lensPts = refPts.map { 
+            val cx = it.x - 400.0
+            val cy = it.y - 300.0
+            // Rotation by 45 degrees
+            val u = (cx + cy) * 0.707
+            val v = (-cx + cy) * 0.707
+            
+            // Apply k to v
+            val nv = v + v * k
+            
+            // Rotate back
+            val nx = u * 0.707 - nv * 0.707
+            val ny = u * 0.707 + nv * 0.707
+            
+            Point(400.0 + nx, 300.0 + ny)
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        
+        assertEquals(k, result.lambda1, 0.005)
+        assertEquals(0.0, result.lambda2, 0.005)
+        
+        // Axis should be ~45 or 135
+        assertTrue(kotlin.math.abs(result.axis - 45.0) < 5.0 || kotlin.math.abs(result.axis - 135.0) < 5.0 || kotlin.math.abs(result.axis - 225.0) < 5.0)
+    }
+
+    @Test
+    fun testAA_robustTensor_sphereWith10PctOutliers() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val k = 0.02
+        val lensPts = refPts.mapIndexed { idx, it ->
+            val cx = it.x - 400.0
+            val cy = it.y - 300.0
+            
+            // Inject 10% outliers
+            if (idx % 10 == 0) {
+                Point(it.x + cx * k + 50.0, it.y + cy * k - 30.0)
+            } else {
+                Point(it.x + cx * k, it.y + cy * k)
+            }
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        
+        // Should recover the same lambda1 and lambda2
+        assertEquals(k, result.lambda1, 0.005)
+        assertEquals(k, result.lambda2, 0.005)
+        assertTrue(result.robustInliersCount < refPts.size)
+    }
+
+    @Test
+    fun testAB_robustTensor_cylinderWith10PctOutliers() {
+        val w = 800.0; val h = 600.0
+        val refPts = generateGrid(w, h, 30.0)
+        
+        val k = 0.03
+        val lensPts = refPts.mapIndexed { idx, it ->
+            val cy = it.y - 300.0
+            
+            if (idx % 10 == 0) {
+                Point(it.x + 30.0, it.y + cy * k - 40.0)
+            } else {
+                Point(it.x, it.y + cy * k)
+            }
+        }
+        
+        val result = V4OpticalAnalyzer.analyzePoints(refPts, lensPts, w, h, refPts.size, lensPts.size, 30.0)
+        assertTrue(result.success)
+        
+        assertEquals(k, result.lambda1, 0.005)
+        assertEquals(0.0, result.lambda2, 0.005)
+        assertTrue(result.robustInliersCount < refPts.size)
+    }
 }

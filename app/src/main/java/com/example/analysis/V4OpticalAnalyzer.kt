@@ -20,7 +20,8 @@ data class OpticalPair(
     val displacement: Point,
     val originalIndex: Int,
     var status: String = "RETAINED",
-    var correctedDisplacement: Point = Point(0.0, 0.0)
+    var correctedDisplacement: Point = Point(0.0, 0.0),
+    var robustWeight: Double = 1.0
 )
 
 data class V4RunResult(
@@ -89,7 +90,17 @@ data class V4RunResult(
     val correctedDispMedian: Double = 0.0,
     val correctedDispMAD: Double = 0.0,
     val correctedDispP90: Double = 0.0,
-    val correctedDispMax: Double = 0.0
+    val correctedDispMax: Double = 0.0,
+    val opticalCenterX: Double = 0.0,
+    val opticalCenterY: Double = 0.0,
+    val robustInliersCount: Int = 0,
+    val weightedFitRms: Double = 0.0,
+    val tensorA11: Double = 0.0,
+    val tensorA12: Double = 0.0,
+    val tensorA21: Double = 0.0,
+    val tensorA22: Double = 0.0,
+    val antisymmetricMag: Double = 0.0,
+    val axisConfidence: Double = 0.0
 )
 
 data class V4Result(
@@ -152,7 +163,17 @@ private data class AggResult(
     val correctedDispMedian: Double = 0.0,
     val correctedDispMAD: Double = 0.0,
     val correctedDispP90: Double = 0.0,
-    val correctedDispMax: Double = 0.0
+    val correctedDispMax: Double = 0.0,
+    val opticalCenterX: Double = 0.0,
+    val opticalCenterY: Double = 0.0,
+    val robustInliersCount: Int = 0,
+    val weightedFitRms: Double = 0.0,
+    val tensorA11: Double = 0.0,
+    val tensorA12: Double = 0.0,
+    val tensorA21: Double = 0.0,
+    val tensorA22: Double = 0.0,
+    val antisymmetricMag: Double = 0.0,
+    val axisConfidence: Double = 0.0
 )
 
 object V4OpticalAnalyzer {
@@ -986,6 +1007,24 @@ object V4OpticalAnalyzer {
                 }
             }
             
+            for (i in 0 until numMeas) {
+                retainedPairs[i].robustWeight = weights[i]
+            }
+
+            // Optical center calculation
+            val det = j00 * j11 - j01 * j10
+            var opticalCenterX = 0.0
+            var opticalCenterY = 0.0
+            if (kotlin.math.abs(det) > 1e-9) {
+                val invJ00 = j11 / det
+                val invJ01 = -j01 / det
+                val invJ10 = -j10 / det
+                val invJ11 = j00 / det
+                
+                opticalCenterX = -(invJ00 * c0 + invJ01 * c1)
+                opticalCenterY = -(invJ10 * c0 + invJ11 * c1)
+            }
+
             var opticalFieldRetainedCount = 0
             val finalPtsToMeasureRef = mutableListOf<Point>()
             var q1 = false; var q2 = false; var q3 = false; var q4 = false
@@ -1000,10 +1039,10 @@ object V4OpticalAnalyzer {
                     val pt = retainedPairs[i].reference
                     finalPtsToMeasureRef.add(pt)
                     
-                    if (pt.x < cx && pt.y < cy) q1 = true
-                    if (pt.x >= cx && pt.y < cy) q2 = true
-                    if (pt.x < cx && pt.y >= cy) q3 = true
-                    if (pt.x >= cx && pt.y >= cy) q4 = true
+                    if (pt.x < opticalCenterX && pt.y < opticalCenterY) q1 = true
+                    if (pt.x >= opticalCenterX && pt.y < opticalCenterY) q2 = true
+                    if (pt.x < opticalCenterX && pt.y >= opticalCenterY) q3 = true
+                    if (pt.x >= opticalCenterX && pt.y >= opticalCenterY) q4 = true
                     
                     if (pt.x < minX) minX = pt.x
                     if (pt.x > maxX) maxX = pt.x
@@ -1018,7 +1057,7 @@ object V4OpticalAnalyzer {
                     val dx = retainedPairs[i].correctedDisplacement.x
                     val dy = retainedPairs[i].correctedDisplacement.y
                     
-                    fieldFitRmsSum += (u - dx) * (u - dx) + (v - dy) * (v - dy)
+                    fieldFitRmsSum += weights[i] * ((u - dx) * (u - dx) + (v - dy) * (v - dy))
                 }
             }
             
@@ -1064,47 +1103,45 @@ object V4OpticalAnalyzer {
                 degeneracyStatus = "DEGENERATE (rank=$rank, cond=${String.format("%.1f", cond)})"
             }
             
-            val J_mat = Mat(2, 2, CvType.CV_64F)
-            J_mat.put(0, 0, j00, j01)
-            J_mat.put(1, 0, j10, j11)
-            
-            val eVal = Mat()
-            val eVec = Mat()
-            Core.eigen(J_mat, eVal, eVec)
-            
-            var l1 = 0.0
-            var l2 = 0.0
-            if (eVal.rows() >= 2) {
-                l1 = eVal.get(0, 0)[0]
-                l2 = eVal.get(1, 0)[0]
-            }
-            
-            if (Math.abs(l2) > Math.abs(l1)) {
-                val temp = l1
-                l1 = l2
-                l2 = temp
-            }
-            
-            val iso = (l1 + l2) / 2.0
-            val aniso = l1 - l2
+            val symCross = (j01 + j10) / 2.0
+            val antisymmetricMag = kotlin.math.abs(j01 - j10) / 2.0
             
             val J_sym = Mat(2, 2, CvType.CV_64F)
             J_sym.put(0, 0, j00)
-            J_sym.put(0, 1, (j01 + j10) / 2.0)
-            J_sym.put(1, 0, (j01 + j10) / 2.0)
+            J_sym.put(0, 1, symCross)
+            J_sym.put(1, 0, symCross)
             J_sym.put(1, 1, j11)
             
             val eValSym = Mat()
             val eVecSym = Mat()
             Core.eigen(J_sym, eValSym, eVecSym)
             
-            var axisDeg = 0.0
-            if (eVecSym.rows() >= 2 && eVecSym.cols() >= 2) {
-                val vx = eVecSym.get(0, 0)[0]
-                val vy = eVecSym.get(0, 1)[0]
-                axisDeg = atan2(vy, vx) * 180.0 / Math.PI
+            var l1 = 0.0
+            var l2 = 0.0
+            var vx = 1.0
+            var vy = 0.0
+            
+            if (eValSym.rows() >= 2) {
+                l1 = eValSym.get(0, 0)[0]
+                l2 = eValSym.get(1, 0)[0]
+                
+                if (kotlin.math.abs(l2) > kotlin.math.abs(l1)) {
+                    val temp = l1
+                    l1 = l2
+                    l2 = temp
+                    vx = eVecSym.get(1, 0)[0]
+                    vy = eVecSym.get(1, 1)[0]
+                } else {
+                    vx = eVecSym.get(0, 0)[0]
+                    vy = eVecSym.get(0, 1)[0]
+                }
             }
             
+            val iso = (l1 + l2) / 2.0
+            val aniso = l1 - l2
+            val axisConfidence = kotlin.math.abs(aniso) / kotlin.math.max(1e-5, antisymmetricMag + fieldFitRms/30.0)
+            
+            var axisDeg = kotlin.math.atan2(vy, vx) * 180.0 / Math.PI
             while (axisDeg < 0.0) axisDeg += 180.0
             while (axisDeg >= 180.0) axisDeg -= 180.0
             
@@ -1156,6 +1193,16 @@ object V4OpticalAnalyzer {
                 correctedDispMAD = correctedDispMAD,
                 correctedDispP90 = correctedDispP90,
                 correctedDispMax = correctedDispMax,
+                opticalCenterX = opticalCenterX,
+                opticalCenterY = opticalCenterY,
+                robustInliersCount = opticalFieldRetainedCount,
+                weightedFitRms = fieldFitRms,
+                tensorA11 = j00,
+                tensorA12 = j01,
+                tensorA21 = j10,
+                tensorA22 = j11,
+                antisymmetricMag = antisymmetricMag,
+                axisConfidence = axisConfidence,
                 refWidth = w.toInt(),
                 refHeight = h.toInt(),
                 registrationModel = registrationModel,
@@ -1330,9 +1377,18 @@ object V4OpticalAnalyzer {
             val dy = if (useCorrectedVectors) pair.correctedDisplacement.y * mag else pair.displacement.y * mag
             
             if (pair.status == "RETAINED") {
-                canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintRef)
-                canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintLens)
-                canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintArrow)
+                if (pair.robustWeight < 0.5) {
+                    val paintLowWeightRef = android.graphics.Paint().apply { color = android.graphics.Color.argb(100, 255, 0, 0); style = android.graphics.Paint.Style.FILL; isAntiAlias = true }
+                    val paintLowWeightLens = android.graphics.Paint().apply { color = android.graphics.Color.argb(100, 0, 255, 0); style = android.graphics.Paint.Style.FILL; isAntiAlias = true }
+                    val paintLowWeightArrow = android.graphics.Paint().apply { color = android.graphics.Color.argb(100, 255, 255, 0); strokeWidth = 1f; style = android.graphics.Paint.Style.STROKE; isAntiAlias = true }
+                    canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintLowWeightRef)
+                    canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintLowWeightLens)
+                    canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintLowWeightArrow)
+                } else {
+                    canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintRef)
+                    canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintLens)
+                    canvas.drawLine(refPt.x.toFloat(), refPt.y.toFloat(), (refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), paintArrow)
+                }
             } else if (pair.status == "LOCAL_OUTLIER") {
                 canvas.drawCircle(refPt.x.toFloat(), refPt.y.toFloat(), 3f, paintOptRejRef)
                 canvas.drawCircle((refPt.x + dx).toFloat(), (refPt.y + dy).toFloat(), 3f, paintOptRejLens)
