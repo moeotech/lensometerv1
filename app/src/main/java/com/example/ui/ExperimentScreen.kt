@@ -140,6 +140,7 @@ fun ExperimentScreen() {
 
                         val cameraProvider = cameraProviderFuture.get()
                         val preview = Preview.Builder().build()
+                        preview.setSurfaceProvider(previewView.surfaceProvider)
                         previewRef = preview
                     
                         val imageAnalysis = ImageAnalysis.Builder()
@@ -178,7 +179,7 @@ fun ExperimentScreen() {
             if (cameraProviderFuture.isDone) {
                 val provider = cameraProviderFuture.get()
                 imageAnalysisRef?.clearAnalyzer()
-                provider.unbindAll()
+                // provider.unbindAll() // Removed to prevent unbinding the next screen's camera
             }
             analysisExecutor.shutdown()
         }

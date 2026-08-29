@@ -254,7 +254,7 @@ fun LensExperimentScreen() {
             if (cameraProviderFuture.isDone) {
                 val provider = cameraProviderFuture.get()
                 imageAnalysisRef?.clearAnalyzer()
-                provider.unbindAll()
+                // provider.unbindAll() // Removed to prevent unbinding the next screen's camera
             }
             analysisExecutor.shutdown()
         }
