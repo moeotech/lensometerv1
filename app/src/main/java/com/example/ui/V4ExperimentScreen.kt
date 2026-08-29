@@ -270,8 +270,7 @@ fun V4ExperimentScreen() {
                             if (!result.success) {
                                 analysisErrorMessage = "INSUFFICIENT OPTICAL FEATURES - HOLD STILL\n${result.errorMessage}"
                                 // Retry same run
-                                currentStep = V4Step.STEP_1_NO_LENS
-                                noLensFrames.clear()
+                                currentStep = V4Step.STEP_2_WITH_LENS
                                 withLensFrames.clear()
                                 camera2ControlRef?.let { c2c ->
                                     val builder = CaptureRequestOptions.Builder()
@@ -285,8 +284,7 @@ fun V4ExperimentScreen() {
                                 runResults[currentRunIndex] = result
                                 if (currentRunIndex < 2) {
                                     currentRunIndex++
-                                    currentStep = V4Step.STEP_1_NO_LENS
-                                    noLensFrames.clear()
+                                    currentStep = V4Step.STEP_2_WITH_LENS
                                     withLensFrames.clear()
                                     // Unlock AE for next run
                                     camera2ControlRef?.let { c2c ->
@@ -341,6 +339,14 @@ fun V4ResultDialog(result: V4Result, onDismiss: () -> Unit) {
             Spacer(modifier = Modifier.height(16.dp))
             
             if (result.success) {
+                if (result.measurementQualityPass) {
+                    Text("MEASUREMENT QUALITY: PASS", color = Color.Green, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                } else {
+                    Text("MEASUREMENT QUALITY: FAIL", color = Color.Red, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("REASON: ${result.qualityMessage}", color = Color.Yellow)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                
                 Text("SPH: ${result.sphDisplay}", color = Color.Cyan, fontSize = 24.sp)
                 Text("CYL: ${result.cylDisplay}", color = Color.Cyan, fontSize = 24.sp)
                 Text("AXIS SIGNAL: ${result.axisDisplay}°", color = Color.Cyan, fontSize = 24.sp)
